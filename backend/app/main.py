@@ -7,23 +7,42 @@ frontend/ folder (repo root, not inside backend/), same layout convention
 as kaggle_kernel/ living outside backend/ too.
 """
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from app import db
+from app.config import settings
 from app.vendored.request_classifier import classify_request
 from app.routes.create import router as create_router
+from app.routes.auth import router as auth_router
+from app.routes.dashboard import router as dashboard_router
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONTEND_DIR = os.path.join(REPO_ROOT, "frontend")
 
-app = FastAPI(title="PrintForge API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Best-effort: if DATABASE_URL isn't configured (e.g. local dev before
+    # Milestone 5's Supabase/Neon instance is wired up), the app still
+    # boots -- only the account/dashboard routes fail with a clear error
+    # when actually used, everything else (create flow, etc.) keeps working.
+    if settings.database_url:
+        db.init_schema()
+    yield
+
+
+app = FastAPI(title="PrintForge API", lifespan=lifespan)
 app.include_router(create_router)
+app.include_router(auth_router)
+app.include_router(dashboard_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,9 +78,29 @@ def result_page():
     return _page("result.html")
 
 
+@app.get("/signup")
+def signup_page():
+    return _page("signup.html")
+
+
+@app.get("/login")
+def login_page():
+    return _page("login.html")
+
+
+@app.get("/dashboard")
+def dashboard_page():
+    return _page("dashboard.html")
+
+
 @app.get("/robots.txt")
 def robots():
     return FileResponse(os.path.join(FRONTEND_DIR, "robots.txt"), media_type="text/plain")
+
+
+@app.exception_handler(db.DatabaseNotConfiguredError)
+async def database_not_configured(request: Request, exc: db.DatabaseNotConfiguredError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @app.exception_handler(404)

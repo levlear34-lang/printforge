@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign up — PrintForge</title>
+<meta name="description" content="Create a free PrintForge account to save your Kaggle token and keep a history of your generated models.">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links">
+      <a href="/login">Log in</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container">
+      <h2>Create an account</h2>
+      <p class="section-sub">Optional — save your Kaggle token and keep a history of your models. You can always use PrintForge anonymously instead.</p>
+
+      <div class="form-card">
+        <div id="banner-slot"></div>
+        <form id="signup-form">
+          <div class="field">
+            <label for="email">Email</label>
+            <input type="text" id="email" required autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" required autocomplete="new-password" minlength="8">
+            <div class="field-hint">At least 8 characters.</div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="submit-btn" style="width:100%">Sign up</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/assets/app.js"></script>
+<script>
+const form = document.getElementById("signup-form");
+const bannerSlot = document.getElementById("banner-slot");
+const submitBtn = document.getElementById("submit-btn");
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  bannerSlot.innerHTML = "";
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Signing up…";
+  try {
+    await apiPost("/api/signup", {
+      email: document.getElementById("email").value.trim(),
+      password: document.getElementById("password").value,
+    });
+    window.location.href = "/dashboard";
+  } catch (e) {
+    bannerSlot.innerHTML = `<div class="banner banner-error">${e.message || "Something went wrong."}</div>`;
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Sign up";
+  }
+});
+</script>
+</body>
+</html>

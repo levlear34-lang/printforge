@@ -25,6 +25,7 @@
   <div class="container">
     <a class="nav-logo" href="/">Print<span>Forge</span></a>
     <div class="nav-links">
+      <span id="auth-nav-slot"></span>
       <a href="/create" class="btn btn-primary">Create your model</a>
     </div>
   </div>
@@ -97,5 +98,7 @@
 <div class="sticky-cta">
   <a href="/create" class="btn btn-primary">Create your model</a>
 </div>
+<script src="/assets/app.js"></script>
+<script>initAuthNav("auth-nav-slot");</script>
 </body>
 </html>

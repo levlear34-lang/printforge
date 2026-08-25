@@ -1,7 +1,10 @@
-"""Milestone 2/3/4: anonymous create-flow endpoints + the pages that use them.
+"""Milestone 2/3/4/5: create-flow endpoints (anonymous or signed-in) + the
+pages that use them.
 
-No auth yet (Milestone 5). Content filter and per-IP rate limiting are
-enforced in generation.submit_request (Milestone 4).
+Content filter and per-IP rate limiting are enforced in
+generation.submit_request (Milestone 4). Signed-in users may omit
+kaggle_token to fall back to their saved (encrypted) token -- see
+generation.submit_request's token-resolution logic.
 """
 import os
 
@@ -9,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.routes.auth import get_current_user_id
 from app.services import generation, jobs
 
 router = APIRouter(prefix="/api")
@@ -16,7 +20,7 @@ router = APIRouter(prefix="/api")
 
 class CreateRequest(BaseModel):
     text: str
-    kaggle_token: str
+    kaggle_token: str | None = None
     tier: str | None = None
 
 
@@ -36,7 +40,11 @@ def _client_ip(request: Request) -> str:
 def create(payload: CreateRequest, request: Request):
     try:
         job_id = generation.submit_request(
-            payload.text, payload.kaggle_token, payload.tier, ip=_client_ip(request),
+            payload.text,
+            payload.kaggle_token,
+            payload.tier,
+            ip=_client_ip(request),
+            user_id=get_current_user_id(request),
         )
     except generation.GenerationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

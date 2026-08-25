@@ -1,11 +1,16 @@
-"""In-memory job store for anonymous create requests.
+"""In-memory job store, shared by anonymous and signed-in create requests.
 
 Deliberately in-memory (a plain dict guarded by a lock), not a database --
-Milestone 5 adds Supabase/Neon for signed-in users' persistent history, but
-Milestone 2 is anonymous-only, so there is nothing worth persisting past
-this process's lifetime yet. Known, accepted limitation: a server restart
-loses in-flight jobs, and this won't work across multiple server instances.
-Documented in CLAUDE.md, not silently glossed over.
+this remains the live/in-flight source of truth for polling regardless of
+who submitted the job. As of Milestone 5, a job with a non-null user_id
+also gets mirrored into Postgres (accounts.record_job_start/record_job_update)
+for persistent dashboard history; anonymous jobs (user_id=None) are never
+written to the database, per the spec's "anonymous use fully supported, no
+history saved" requirement. Known, accepted limitation carried over from
+Milestone 2: a server restart loses whatever's only in this in-memory
+store (in-flight status/polling state), and this won't work across
+multiple server instances. Documented in CLAUDE.md, not silently glossed
+over.
 
 Each job's Kaggle token is held here, in memory, for the job's lifetime --
 never written to disk or logged -- because Kaggle's push/status/output calls
@@ -26,7 +31,7 @@ MIN_RECHECK_INTERVAL_SECONDS = 10
 TERMINAL_STATUSES = ("complete", "error", "quality_failed")
 
 
-def create_job(prompt, classification, tier, token, kaggle_username, kernel_id, ip=None):
+def create_job(prompt, classification, tier, token, kaggle_username, kernel_id, ip=None, user_id=None):
     job_id = uuid.uuid4().hex[:12]
     with _LOCK:
         _JOBS[job_id] = {
@@ -38,6 +43,7 @@ def create_job(prompt, classification, tier, token, kaggle_username, kernel_id, 
             "kaggle_username": kaggle_username,
             "kernel_id": kernel_id,
             "ip": ip,
+            "user_id": user_id,
             "status": "submitted",
             "created_at": time.time(),
             "last_checked_at": 0.0,

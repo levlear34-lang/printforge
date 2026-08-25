@@ -11,7 +11,7 @@
 <nav class="nav">
   <div class="container">
     <a class="nav-logo" href="/">Print<span>Forge</span></a>
-    <div class="nav-links"></div>
+    <div class="nav-links"><span id="auth-nav-slot"></span></div>
   </div>
 </nav>
 
@@ -45,9 +45,17 @@
             </div>
           </div>
 
-          <div class="field">
+          <div class="field" id="saved-token-field" style="display:none">
+            <label>Kaggle token</label>
+            <div class="banner banner-info" id="saved-token-banner"></div>
+            <label style="font-weight:400; font-size:0.85rem; display:flex; align-items:center; gap:6px; margin-top:8px">
+              <input type="checkbox" id="use-different-token" style="width:auto"> Use a different token for this request
+            </label>
+          </div>
+
+          <div class="field" id="token-field">
             <label for="token">Your Kaggle API token</label>
-            <input type="password" id="token" name="token" placeholder="Paste your Kaggle token" required autocomplete="off">
+            <input type="password" id="token" name="token" placeholder="Paste your Kaggle token" autocomplete="off">
             <div class="field-hint">Used only for this request. Never written to disk or logged.</div>
             <details class="onboarding">
               <summary>Don't have a Kaggle account?</summary>
@@ -76,9 +84,38 @@ const tierOptions = document.querySelectorAll(".tier-option");
 const bannerSlot = document.getElementById("banner-slot");
 const classificationHint = document.getElementById("classification-hint");
 const submitBtn = document.getElementById("submit-btn");
+const savedTokenField = document.getElementById("saved-token-field");
+const savedTokenBanner = document.getElementById("saved-token-banner");
+const tokenField = document.getElementById("token-field");
+const tokenInput = document.getElementById("token");
+const useDifferentToken = document.getElementById("use-different-token");
 
 let selectedTier = "fast";
 let classifyTimer = null;
+let hasSavedToken = false;
+
+initAuthNav("auth-nav-slot");
+
+(async () => {
+  try {
+    const me = await apiGet("/api/me");
+    if (me.logged_in && me.has_saved_token) {
+      hasSavedToken = true;
+      savedTokenBanner.textContent = `Using your saved Kaggle token (${me.saved_kaggle_username || "saved"}).`;
+      savedTokenField.style.display = "block";
+      tokenField.style.display = "none";
+      tokenInput.required = false;
+    }
+  } catch (e) {
+    // Not logged in / /api/me unavailable -- fall back to the plain paste-a-token flow.
+  }
+})();
+
+useDifferentToken.addEventListener("change", () => {
+  const wantsDifferent = useDifferentToken.checked;
+  tokenField.style.display = wantsDifferent ? "block" : "none";
+  tokenInput.required = wantsDifferent;
+});
 
 tierOptions.forEach((el) => {
   el.addEventListener("click", () => {
@@ -125,11 +162,13 @@ form.addEventListener("submit", async (event) => {
   submitBtn.textContent = "Submitting…";
 
   const text = promptField.value.trim();
-  const token = document.getElementById("token").value.trim();
+  const token = tokenInput.value.trim();
   const tierVisible = tierField.style.display !== "none";
+  const usingSavedToken = hasSavedToken && !useDifferentToken.checked;
 
   try {
-    const body = { text, kaggle_token: token };
+    const body = { text };
+    if (!usingSavedToken) body.kaggle_token = token;
     if (tierVisible) body.tier = selectedTier;
     const result = await apiPost("/api/create", body);
     window.location.href = `/job?id=${encodeURIComponent(result.job_id)}`;

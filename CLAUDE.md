@@ -68,6 +68,27 @@ branding throughout.
 - `kaggle_kernel/printforge_parametric/` — the parametric-tier generation
   kernel (template; job-specific copies are built at request time, never
   committed)
+- `backend/app/db.py` + `backend/app/schema.sql` — Postgres access layer
+  (plain psycopg SQL, no ORM) and the 2-table schema (`users`,
+  `job_history`). Every function here is mocked in tests, never hit for
+  real in the automated suite (no Postgres available in this dev
+  environment) — see the module docstring.
+- `backend/app/services/auth.py` — password hashing (bcrypt) + stateless
+  signed-cookie sessions (itsdangerous, no server-side session table)
+- `backend/app/services/token_crypto.py` — Fernet encrypt/decrypt for
+  saved Kaggle tokens at rest (`TOKEN_ENCRYPTION_KEY` must be a real
+  Fernet key, not just any random string)
+- `backend/app/services/accounts.py` — composes db/auth/token_crypto/
+  kaggle_client into the actual signup/login/save-token/dashboard-history
+  operations; routes stay thin wrappers around this
+- `backend/app/routes/auth.py` — `/api/signup`, `/api/login`,
+  `/api/logout`, `/api/me`
+- `backend/app/routes/dashboard.py` — `/api/dashboard/jobs` (+ per-job
+  preview/download), `/api/account/token` (save/delete), `/api/account`
+  (delete)
+- `frontend/signup.html`, `login.html`, `dashboard.html` — account pages;
+  `create.html` now checks `/api/me` and offers a saved-token toggle for
+  signed-in visitors instead of always requiring a pasted token
 - `backend/tests/` — pytest suite
 - `render.yaml`, `Procfile` — deploy config for Render/Railway
 - `frontend/` — landing (`index.html`), create form (`create.html`), job
@@ -117,13 +138,16 @@ Not yet vendored/ported (deferred to when they're actually needed):
 ## Status
 Milestones 2, 3, and 4 (backend + frontend create flow, content filter,
 rate limiting, SEO basics) done and verified against real Kaggle
-infrastructure and real HTTP requests. Milestone 1's hosting-deploy
-confirmation is still pending (see "Known blockers" below, updated as it
-resolves).
+infrastructure and real HTTP requests. Milestone 5 (database, accounts,
+dashboard) is built and unit-tested (all DB calls mocked, no real Postgres
+available in this dev environment); live verification against a real
+Supabase instance is pending the developer finishing their connection
+setup (see Progress Log and "Known blockers"). Milestone 1's hosting-deploy
+confirmation is also still pending.
 
-## Current milestone: 5 — Database, accounts, dashboard
-Supabase/Neon Postgres, signup/login, encrypted saved-token storage,
-dashboard with job history. See Progress Log for what's actually done.
+## Current milestone: 6 — Feedback, FAQ, Terms, Privacy
+Feedback form + admin view, FAQ page, Terms of Use, Privacy Policy, Kaggle
+onboarding help content. See Progress Log for what's actually done.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -169,9 +193,16 @@ assistant does without the account owner present).
 - Render: developer is setting up the account/connection on their end
   (in progress as of Milestone 2) — `render.yaml` is prepared and tested
   against the current backend. Deploy confirmation still pending a live URL.
-- Database (Milestone 5) has the same shape of blocker: needs a
-  Supabase/Neon account created and a `DATABASE_URL` provided via env var
-  once that milestone starts.
+- Database: developer has a Supabase project set up (in progress as of
+  Milestone 5) and is working through connecting it -- Supabase's UI
+  showed an IPv6-only warning under one pooler option, which would have
+  been a real deploy blocker against Render (IPv4-only egress); pointed
+  the developer at the free, IPv4-compatible shared Supavisor pooler
+  (`aws-0-<region>.pooler.supabase.com:6543`) instead of the paid
+  IPv4-add-on path, verified via Supabase's own docs before answering
+  rather than guessing. `DATABASE_URL` still needs to be set once that's
+  sorted; the app boots and works without it (see Progress Log), only
+  account/dashboard routes are blocked in the meantime.
 
 ## Progress Log
 (Append a dated entry after each milestone — what changed, what passed,
@@ -520,3 +551,120 @@ what's next.)
   same shape of blocker as Milestone 1's Render deploy -- will flag which
   of Supabase/Neon to ask for once the design work makes that concrete,
   rather than guessing which free-tier Postgres host to commit to.
+
+- 2026-08-25: Milestone 5 (database, accounts, dashboard) — built and
+  unit-tested; live verification against a real Postgres instance is
+  pending the developer finishing their Supabase connection setup (see
+  "Known blockers"). No Docker/local Postgres was available in this
+  environment either, so this is the first milestone where "manually
+  verified for real" means "against the developer's real Supabase
+  instance once it's ready," not something achievable solo -- documented
+  honestly rather than claimed as done.
+
+  Provider judgment call: Supabase over Neon (the spec named both as
+  options), since the developer didn't have a preference ready when
+  asked. Reasoning: Supabase bundles a free Storage feature alongside
+  Postgres, which is architecturally useful if generated STL/preview
+  files ever need to survive a Render restart (they currently don't --
+  still local disk, see below) without adding a third external account.
+  The actual DB access layer (`db.py`) is plain psycopg against a generic
+  `DATABASE_URL`, so it would work against Neon too with zero code changes
+  if that ever needs to change.
+
+  Schema (`schema.sql`, 2 tables): `users` (email, bcrypt password hash,
+  an encrypted-Kaggle-token column + its plaintext username for display,
+  nullable until a token is saved) and `job_history` (mirrors a subset of
+  the in-memory job record for signed-in users only -- prompt,
+  classification, status, file paths, a 7-day `expires_at`). Anonymous
+  jobs are never written here, per the spec's "no history saved" for
+  anonymous use -- `jobs.py`'s in-memory store remains the live/polling
+  source of truth for every job regardless of who submitted it;
+  `job_history` is purely the persistent mirror for dashboard display,
+  updated at the same points `jobs.update_job` is (see
+  `generation.py`'s new `accounts.record_job_start`/`record_job_update`
+  calls, gated on `user_id is not None`).
+
+  Auth: bcrypt password hashes, stateless signed cookie sessions
+  (`itsdangerous`, no server-side session table -- a deliberate
+  simplicity tradeoff, documented in `auth.py`: can't force-invalidate one
+  session without rotating `SESSION_SECRET` for everyone, acceptable for
+  a v1 with no incident-response tooling yet). Saved Kaggle tokens are
+  encrypted at rest with Fernet (authenticated encryption, not just
+  reversible obfuscation) -- `TOKEN_ENCRYPTION_KEY` must be an actual
+  Fernet key, documented with the exact generation command in
+  `.env.example` after almost repeating Milestone 1's mistake of writing
+  a plausible-sounding but wrong generation command from memory; checked
+  Fernet's actual key-format requirement first this time.
+
+  `generation.submit_request` now accepts an optional `user_id`: if the
+  visitor is signed in and didn't paste a fresh token, it decrypts and
+  uses their saved one (`accounts.get_saved_token_plaintext`) --
+  decrypted only in-memory for that one job submission, never returned
+  from any API response. `routes/create.py`'s `CreateRequest.kaggle_token`
+  is now optional for exactly this reason.
+
+  A real bug caught before it shipped, not by luck: first version let a
+  missing `DATABASE_URL` bubble up as a bare, unhandled `RuntimeError` ->
+  a generic FastAPI 500 with no useful message. Tested this directly
+  (booted the app locally without `DATABASE_URL` set, hit `/api/signup`
+  for real) rather than assuming error handling worked, saw the raw 500,
+  and fixed it: `db.get_connection()` now raises a dedicated
+  `DatabaseNotConfiguredError`, caught by a specific FastAPI exception
+  handler that returns a clean 503 with an honest message. Re-verified
+  live after the fix -- both the API response and, separately, that the
+  frontend's existing generic error-banner handling displays that exact
+  message to the visitor with no extra frontend code needed.
+
+  Frontend: `signup.html`, `login.html`, `dashboard.html` (job history
+  with thumbnails/status/expiry, delete-per-job, saved-token
+  save/view-masked/delete, delete-account with a confirm dialog).
+  `create.html` now checks `/api/me` on load and, for a signed-in visitor
+  with a saved token, hides the token field behind a "use a different
+  token for this request" checkbox instead of always demanding a fresh
+  paste. `index.html`/`create.html` navs now show "Log in" or "Dashboard"
+  based on session state (`app.js`'s new `initAuthNav`).
+
+  32 new tests across `test_auth_service.py`, `test_token_crypto.py`,
+  `test_accounts.py`, `test_auth_routes.py`, `test_dashboard_routes.py` --
+  all `db.*` and `kaggle_client.*` calls mocked, consistent with this
+  project's no-real-external-calls-in-automated-tests rule. Added a
+  `tests/conftest.py` to set throwaway `SESSION_SECRET`/
+  `TOKEN_ENCRYPTION_KEY` values before any test module imports app code
+  (both are module-level singletons in `config.py`, read once at import
+  time). 83/83 tests passing project-wide.
+
+  Also verified live, beyond the DB-missing-error case above: booted the
+  app locally with generated (throwaway) `SESSION_SECRET`/
+  `TOKEN_ENCRYPTION_KEY` but no `DATABASE_URL`, confirmed it still boots
+  cleanly and the whole non-account create flow keeps working (graceful
+  degradation, not an all-or-nothing dependency); clicked through
+  signup.html in a real browser and confirmed the frontend correctly
+  displays the server's real error message; confirmed the auth-aware nav
+  correctly shows "Log in" for a logged-out visitor on both the landing
+  and create pages.
+
+  Also fixed in passing: while answering the developer's question about a
+  Supabase dashboard warning ("Transaction pooler uses IPv6 by default"),
+  confirmed via Supabase's own docs (not memory, which turned out to be
+  stale/imprecise on this specific point) that the warning applies to a
+  newer per-project "Dedicated Pooler" option, while the classic shared
+  Supavisor pooler (`aws-0-<region>.pooler.supabase.com:6543`) remains
+  free and IPv4-compatible -- the one to actually use for a Render
+  deployment, avoiding an unnecessary $4/mo add-on.
+
+  Known, accepted limitation carried forward: generated STL/preview files
+  still live on local disk only (`GENERATED_ROOT`), not in any persistent/
+  cloud storage -- a dashboard entry can show a job as "complete" with a
+  now-missing file if the Render service restarts between generation and
+  a later dashboard visit (the UI already handles a missing file
+  gracefully -- `preview_url`/`download_url` come back `null` -- but the
+  file itself is genuinely gone). Real cloud file storage (e.g. Supabase
+  Storage, now that a Supabase project exists) is a reasonable follow-up
+  but deliberately out of scope here to keep this milestone's diff
+  focused; flagged rather than silently accepted as permanent.
+
+  Next: Milestone 6 -- feedback form + admin view, FAQ, Terms of Use,
+  Privacy Policy, Kaggle onboarding help content. Once `DATABASE_URL` is
+  confirmed working, close the loop on Milestone 5 with a real signup ->
+  save token -> submit a job -> see it on the dashboard walkthrough
+  against the developer's actual Supabase instance.

@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — PrintForge</title>
+<meta name="description" content="Your PrintForge job history, saved Kaggle token, and account settings.">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.job-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.job-row img {
+  width: 72px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #111;
+  flex-shrink: 0;
+}
+.job-row .job-thumb-placeholder {
+  width: 72px;
+  height: 52px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+.job-row .job-info { flex: 1; min-width: 0; }
+.job-row .job-prompt { font-size: 0.92rem; margin: 0 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job-row .job-meta { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
+.job-row .job-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.account-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.danger-zone {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links">
+      <a href="/create" class="btn btn-primary">Create your model</a>
+      <a href="#" id="logout-link">Log out</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container">
+      <h2>Dashboard</h2>
+      <p class="section-sub" id="account-email"></p>
+
+      <div class="account-card">
+        <h3 style="margin-top:0">Kaggle token</h3>
+        <div id="token-section"></div>
+      </div>
+
+      <h3>Your models</h3>
+      <div id="jobs-list"><p style="color:var(--text-muted)">Loading…</p></div>
+
+      <div class="danger-zone">
+        <button class="btn btn-secondary" id="delete-account-btn">Delete account</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/assets/app.js"></script>
+<script>
+const emailEl = document.getElementById("account-email");
+const tokenSection = document.getElementById("token-section");
+const jobsList = document.getElementById("jobs-list");
+
+async function init() {
+  const me = await apiGet("/api/me");
+  if (!me.logged_in) {
+    window.location.href = "/login";
+    return;
+  }
+  emailEl.textContent = me.email;
+  renderTokenSection(me);
+  loadJobs();
+}
+
+function renderTokenSection(me) {
+  if (me.has_saved_token) {
+    tokenSection.innerHTML = `
+      <p>Saved (Kaggle account: <strong>${escapeHtml(me.saved_kaggle_username || "")}</strong>). Never shown in plain text.</p>
+      <button class="btn btn-secondary" id="delete-token-btn">Delete saved token</button>
+    `;
+    document.getElementById("delete-token-btn").addEventListener("click", async () => {
+      await fetch("/api/account/token", { method: "DELETE" });
+      const me2 = await apiGet("/api/me");
+      renderTokenSection(me2);
+    });
+  } else {
+    tokenSection.innerHTML = `
+      <p style="color:var(--text-muted)">No token saved. Save one so you don't have to paste it every time.</p>
+      <div class="field">
+        <input type="password" id="new-token-input" placeholder="Paste your Kaggle token">
+      </div>
+      <button class="btn btn-primary" id="save-token-btn">Save token</button>
+      <div id="token-banner-slot"></div>
+    `;
+    document.getElementById("save-token-btn").addEventListener("click", async () => {
+      const bannerSlot = document.getElementById("token-banner-slot");
+      bannerSlot.innerHTML = "";
+      try {
+        await apiPost("/api/account/token", { kaggle_token: document.getElementById("new-token-input").value.trim() });
+        const me2 = await apiGet("/api/me");
+        renderTokenSection(me2);
+      } catch (e) {
+        bannerSlot.innerHTML = `<div class="banner banner-error">${escapeHtml(e.message || "")}</div>`;
+      }
+    });
+  }
+}
+
+async function loadJobs() {
+  try {
+    const jobs = await apiGet("/api/dashboard/jobs");
+    if (jobs.length === 0) {
+      jobsList.innerHTML = `<p style="color:var(--text-muted)">No models yet. <a href="/create">Create your first one</a>.</p>`;
+      return;
+    }
+    jobsList.innerHTML = jobs.map(renderJobRow).join("");
+    jobs.forEach((job) => {
+      const btn = document.getElementById(`delete-${job.id}`);
+      if (btn) {
+        btn.addEventListener("click", async () => {
+          await fetch(`/api/dashboard/jobs/${job.id}`, { method: "DELETE" });
+          loadJobs();
+        });
+      }
+    });
+  } catch (e) {
+    jobsList.innerHTML = `<p style="color:var(--error)">${escapeHtml(e.message || "Couldn't load your models.")}</p>`;
+  }
+}
+
+function renderJobRow(job) {
+  const thumb = job.preview_url
+    ? `<img src="${job.preview_url}" alt="Preview of ${escapeHtml(job.prompt)}">`
+    : `<div class="job-thumb-placeholder"></div>`;
+  const downloadBtn = job.download_url
+    ? `<a href="${job.download_url}" class="btn btn-secondary">Download</a>`
+    : "";
+  return `
+    <div class="job-row">
+      ${thumb}
+      <div class="job-info">
+        <p class="job-prompt">${escapeHtml(job.prompt)}</p>
+        <p class="job-meta">${job.status} · expires ${new Date(job.expires_at).toLocaleDateString()}</p>
+      </div>
+      <div class="job-actions">
+        ${downloadBtn}
+        <button class="btn btn-secondary" id="delete-${job.id}">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+document.getElementById("logout-link").addEventListener("click", async (event) => {
+  event.preventDefault();
+  await fetch("/api/logout", { method: "POST" });
+  window.location.href = "/";
+});
+
+document.getElementById("delete-account-btn").addEventListener("click", async () => {
+  if (!confirm("Delete your account? This also deletes your saved token and model history. This can't be undone.")) return;
+  await fetch("/api/account", { method: "DELETE" });
+  window.location.href = "/";
+});
+
+init();
+</script>
+</body>
+</html>

@@ -1,5 +1,7 @@
 """Orchestrates a single create request: classify -> (design) -> submit ->
-poll -> retrieve. No auth, no persistence -- Milestone 2 scope only.
+poll -> retrieve. Anonymous jobs are in-memory only; signed-in (user_id
+set) jobs also get mirrored into Postgres for dashboard history -- see
+accounts.record_job_start/record_job_update.
 """
 import json
 import os
@@ -9,7 +11,7 @@ import time
 from app.vendored.request_classifier import classify_request
 from app.vendored.request_parser import parse_request
 from app.vendored.design_agent import design_alternatives
-from app.services import content_filter, jobs, kaggle_client, kernel_builder, rate_limit
+from app.services import accounts, content_filter, jobs, kaggle_client, kernel_builder, rate_limit
 
 GENERATED_ROOT = os.path.join(tempfile.gettempdir(), "printforge_generated")
 
@@ -20,10 +22,15 @@ class GenerationError(Exception):
         self.status_code = status_code
 
 
-def submit_request(text, token, tier=None, ip=None):
+def submit_request(text, token=None, tier=None, ip=None, user_id=None):
     text = (text or "").strip()
     if not text:
         raise GenerationError("Please describe what you'd like to print.")
+
+    if not token and user_id is not None:
+        token = accounts.get_saved_token_plaintext(user_id)
+    if not token:
+        raise GenerationError("A Kaggle token is required.", status_code=422)
 
     try:
         content_filter.check_prompt(text)
@@ -68,13 +75,18 @@ def submit_request(text, token, tier=None, ip=None):
         kaggle_username=username,
         kernel_id=None,
         ip=ip,
+        user_id=user_id,
     )
+    if user_id is not None:
+        accounts.record_job_start(job_id, user_id, text, classification)
 
     kernel_dir, kernel_id = kernel_builder.build_kernel("parametric", job_id, username, spec=spec)
     try:
         kernel_id = kaggle_client.push_kernel(token, kernel_dir)
     except kaggle_client.KaggleCliError as exc:
         jobs.update_job(job_id, status="error", error=str(exc))
+        if user_id is not None:
+            accounts.record_job_update(job_id, status="error")
         raise GenerationError(f"Failed to submit the job to Kaggle: {exc}", status_code=502) from exc
     finally:
         kernel_builder.cleanup(kernel_dir)
@@ -100,12 +112,16 @@ def check_job(job_id):
         status_text = kaggle_client.get_status(job["token"], job["kernel_id"])
     except kaggle_client.KaggleCliError as exc:
         jobs.update_job(job_id, status="error", error=str(exc))
+        if job["user_id"] is not None:
+            accounts.record_job_update(job_id, status="error")
         return jobs.public_view(jobs.get_job(job_id))
 
     if "COMPLETE" in status_text.upper():
         _retrieve_and_finalize(job_id, job)
     elif "ERROR" in status_text.upper() or "CANCEL" in status_text.upper():
         jobs.update_job(job_id, status="error", error=f"Kaggle run failed: {status_text}")
+        if job["user_id"] is not None:
+            accounts.record_job_update(job_id, status="error")
     else:
         jobs.update_job(job_id, status="running")
 
@@ -113,6 +129,7 @@ def check_job(job_id):
 
 
 def _retrieve_and_finalize(job_id, job):
+    user_id = job["user_id"]
     dest_dir = os.path.join(GENERATED_ROOT, job_id)
     try:
         kaggle_client.retrieve_output(
@@ -121,6 +138,8 @@ def _retrieve_and_finalize(job_id, job):
         )
     except kaggle_client.KaggleCliError as exc:
         jobs.update_job(job_id, status="error", error=str(exc))
+        if user_id is not None:
+            accounts.record_job_update(job_id, status="error")
         return
 
     stl_path = os.path.join(dest_dir, "model.stl")
@@ -133,6 +152,8 @@ def _retrieve_and_finalize(job_id, job):
             status="error",
             error="Kaggle run finished but no model.stl was produced -- see the kernel log for details.",
         )
+        if user_id is not None:
+            accounts.record_job_update(job_id, status="error")
         return
 
     passed = True
@@ -148,6 +169,8 @@ def _retrieve_and_finalize(job_id, job):
             error="The generated model failed validation (non-manifold geometry or out-of-envelope size). Try adjusting the request.",
             result={"stl_path": stl_path, "preview_path": preview_path, "report_path": report_path},
         )
+        if user_id is not None:
+            accounts.record_job_update(job_id, status="quality_failed", stl_path=stl_path, preview_path=preview_path)
         return
 
     jobs.update_job(
@@ -155,3 +178,5 @@ def _retrieve_and_finalize(job_id, job):
         status="complete",
         result={"stl_path": stl_path, "preview_path": preview_path, "report_path": report_path},
     )
+    if user_id is not None:
+        accounts.record_job_update(job_id, status="complete", stl_path=stl_path, preview_path=preview_path)

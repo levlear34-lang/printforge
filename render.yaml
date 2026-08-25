@@ -11,3 +11,15 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: 3.12.6
+      # Set these manually in the Render dashboard (Environment tab) --
+      # never committed, sync: false just means "not managed by this file".
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      # TOKEN_ENCRYPTION_KEY must be a Fernet key specifically (not any
+      # random string), so it can't use Render's generic generateValue --
+      # generate it with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false

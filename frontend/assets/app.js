@@ -31,3 +31,16 @@ async function apiGet(path) {
 function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
+
+async function initAuthNav(slotId) {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  try {
+    const me = await apiGet("/api/me");
+    slot.innerHTML = me.logged_in
+      ? `<a href="/dashboard">Dashboard</a>`
+      : `<a href="/login">Log in</a>`;
+  } catch (e) {
+    slot.innerHTML = `<a href="/login">Log in</a>`;
+  }
+}
