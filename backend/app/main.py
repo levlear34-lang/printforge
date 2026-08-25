@@ -10,8 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.vendored.request_classifier import classify_request
+from app.routes.create import router as create_router
 
 app = FastAPI(title="PrintForge API")
+app.include_router(create_router)
 
 app.add_middleware(
     CORSMiddleware,

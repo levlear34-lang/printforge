@@ -1,0 +1,70 @@
+"""Assemble a per-job copy of a Kaggle kernel template, ready to push.
+
+Templates live in kaggle_kernel/<tier_key>/ at the repo root (sibling to
+backend/, not inside it -- consistent with AI_3D_FACTORY's layout). Each
+build call copies the template into a fresh temp directory, rewrites
+kernel-metadata.json's id/title to the visitor's own username + a
+job-scoped slug, and (for the parametric template) injects the computed
+design spec as a JSON literal in run.py.
+"""
+import json
+import os
+import re
+import shutil
+import tempfile
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+KERNEL_TEMPLATES_DIR = os.path.join(REPO_ROOT, "kaggle_kernel")
+
+TIERS = {
+    "parametric": {
+        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "printforge_parametric"),
+        "accelerator": None,
+    },
+    # "fast" and "refined" (creative tiers) land once the Shap-E / SD->TripoSR
+    # kernels are ported to the same portable-Blender print-readiness stage
+    # this parametric template proves out first.
+}
+
+
+def _slug(job_id):
+    return re.sub(r"[^a-z0-9-]", "", f"printforge-{job_id}".lower())
+
+
+def build_kernel(tier_key, job_id, username, spec=None):
+    """Copy the tier's template into a fresh temp dir, ready to `kaggle
+    kernels push -p <returned dir>`. Returns (kernel_dir, kernel_id).
+    """
+    if tier_key not in TIERS:
+        raise ValueError(f"Unknown kernel tier: {tier_key}")
+
+    template_dir = TIERS[tier_key]["template_dir"]
+    dest_dir = tempfile.mkdtemp(prefix="pf_kernel_")
+    for name in os.listdir(template_dir):
+        shutil.copy2(os.path.join(template_dir, name), os.path.join(dest_dir, name))
+
+    kernel_id = f"{username}/{_slug(job_id)}"
+    meta_path = os.path.join(dest_dir, "kernel-metadata.json")
+    with open(meta_path, encoding="utf-8") as f:
+        meta = json.load(f)
+    meta["id"] = kernel_id
+    meta["title"] = _slug(job_id)
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+    if spec is not None:
+        run_path = os.path.join(dest_dir, "run.py")
+        with open(run_path, encoding="utf-8") as f:
+            content = f.read()
+        content = content.replace(
+            "SPEC_JSON = {}",
+            f"SPEC_JSON = {json.dumps(spec)}",
+        )
+        with open(run_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    return dest_dir, kernel_id
+
+
+def cleanup(kernel_dir):
+    shutil.rmtree(kernel_dir, ignore_errors=True)
