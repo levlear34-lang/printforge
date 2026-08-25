@@ -3,18 +3,28 @@ token per call.
 
 Unlike AI_3D_FACTORY's kaggle_generator.py (which reads one fixed credential
 from ~/.kaggle for the developer's own account), every call here takes the
-token as an explicit argument and writes it to a fresh temporary
-KAGGLE_CONFIG_DIR that is deleted immediately after the subprocess call
-returns -- the token is never written into this machine's real ~/.kaggle,
-never logged, and never lives on disk longer than one subprocess call. The
-in-memory job record (see jobs.py) is the only place a token is held between
-calls, for the lifetime of that job.
+token as an explicit argument and passes it via the KAGGLE_API_TOKEN
+environment variable for that one subprocess call only -- never written to
+any file, never logged, gone the moment the call returns. The in-memory job
+record (see jobs.py) is the only place a token is held between calls, for
+the lifetime of that job.
+
+IMPORTANT, found the hard way (see CLAUDE.md Milestone 3 Progress Log): this
+version of the `kaggle` CLI (2.2.4, using `kagglesdk`) does NOT read
+KAGGLE_CONFIG_DIR for access-token auth at all -- its lookup order is
+KAGGLE_API_TOKEN env var, then unconditionally ~/.kaggle/access_token on
+this machine, full stop. A first attempt used a per-request temp
+KAGGLE_CONFIG_DIR (the documented mechanism for the older kaggle.json
+auth), which silently did nothing: every call actually authenticated as
+this developer's own real Kaggle account regardless of what token was
+supplied, including garbage tokens. Confirmed via a real test (a
+random-bytes fake token still resolved to the developer's real username)
+before trusting the fix below, which uses the environment variable this
+CLI version actually checks.
 """
 import json
 import os
-import shutil
 import subprocess
-import tempfile
 
 
 class KaggleAuthError(Exception):
@@ -26,27 +36,18 @@ class KaggleCliError(Exception):
 
 
 def _run_with_token(token, args, timeout=120):
-    config_dir = tempfile.mkdtemp(prefix="pf_kaggle_")
-    try:
-        token_path = os.path.join(config_dir, "access_token")
-        with open(token_path, "w", encoding="utf-8") as f:
-            f.write(token.strip())
-        os.chmod(token_path, 0o600)
+    env = dict(os.environ)
+    env.pop("KAGGLE_CONFIG_DIR", None)
+    env["KAGGLE_API_TOKEN"] = token.strip()
+    env["PYTHONUTF8"] = "1"
 
-        env = dict(os.environ)
-        env["KAGGLE_CONFIG_DIR"] = config_dir
-        env["PYTHONUTF8"] = "1"
-
-        result = subprocess.run(
-            ["python", "-m", "kaggle"] + args,
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=timeout,
-        )
-        return result
-    finally:
-        shutil.rmtree(config_dir, ignore_errors=True)
+    return subprocess.run(
+        ["python", "-m", "kaggle"] + args,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=timeout,
+    )
 
 
 def resolve_username(token):

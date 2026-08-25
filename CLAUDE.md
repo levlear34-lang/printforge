@@ -53,8 +53,10 @@ branding throughout.
   `app/modules/`: `request_parser.py`, `request_classifier.py`,
   `design_agent.py`. See "Vendored modules" below for the sync policy.
 - `backend/app/services/kaggle_client.py` — per-request Kaggle CLI wrapper;
-  every call takes the visitor's token as an explicit argument and writes
-  it to a fresh temp `KAGGLE_CONFIG_DIR`, deleted immediately after
+  every call takes the visitor's token as an explicit argument and passes
+  it via the `KAGGLE_API_TOKEN` env var for that one subprocess call only
+  (never written to a file — see Milestone 3's Progress Log entry for why
+  `KAGGLE_CONFIG_DIR`, the first approach, silently didn't work)
 - `backend/app/services/jobs.py` — in-memory async job store (anonymous,
   Milestone 2 scope; Milestone 5 adds DB-backed history for accounts)
 - `backend/app/services/kernel_builder.py` — assembles a per-job copy of a
@@ -68,7 +70,11 @@ branding throughout.
   committed)
 - `backend/tests/` — pytest suite
 - `render.yaml`, `Procfile` — deploy config for Render/Railway
-- `frontend/` — placeholder until Milestone 3
+- `frontend/` — landing (`index.html`), create form (`create.html`), job
+  status polling (`job.html`), result/download (`result.html`), shared
+  `assets/style.css` + `assets/app.js`. Served directly by the FastAPI app
+  (`main.py` mounts `/assets` and returns each page for its clean route) —
+  one process, one Render service, no separate frontend deploy pipeline.
 
 ## Vendored modules
 `backend/app/vendored/request_parser.py`, `request_classifier.py`, and
@@ -109,13 +115,15 @@ Not yet vendored/ported (deferred to when they're actually needed):
   added. See Progress Log.
 
 ## Status
-Milestone 2 (core create flow, parametric only) done and verified against
-real Kaggle infrastructure. Milestone 1's hosting-deploy confirmation is
-still pending (see "Known blockers" below, updated as it resolves).
+Milestones 2 and 3 (backend + frontend create flow) done and verified
+against real Kaggle infrastructure, including a real browser session
+clicking through the whole flow. Milestone 1's hosting-deploy confirmation
+is still pending (see "Known blockers" below, updated as it resolves).
 
-## Current milestone: 3 — Core create flow (frontend)
-Landing page, create form, job status (polling), and result/download pages,
-wired to Milestone 2's backend. See Progress Log for what's actually done.
+## Current milestone: 4 — Content filter, rate limiting, SEO basics
+Content filter on prompts, rate limiting (concurrency cap + daily
+submissions per visitor), custom 404, robots.txt, page titles/meta/alt
+text/social image. See Progress Log for what's actually done.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -350,3 +358,96 @@ what's next.)
   tier kernel work (Shap-E/SD->TripoSR + portable-Blender print-readiness)
   is a real gap to come back to before the product is complete, not
   forgotten -- tracked in the "Not yet vendored/ported" list above.
+
+- 2026-08-25: Milestone 3 (core create-flow frontend) — done, including a
+  critical security bug found and fixed only because the flow was actually
+  tested through a real browser rather than trusted from passing unit
+  tests. Read this one in full if touching kaggle_client.py.
+
+  Built: plain HTML/CSS/JS (no framework, no build step) -- `index.html`
+  (landing, hero CTA above the fold, sticky mobile CTA, a real example
+  using the actual phone-stand preview PNG generated in Milestone 2, not a
+  mockup), `create.html` (prompt textarea that live-classifies via the
+  existing `/api/classify` endpoint and reveals the fast/refined tier
+  picker only for creative requests, Kaggle token field with a "don't
+  have an account?" onboarding `<details>`), `job.html` (polls
+  `GET /api/jobs/{id}` every 6s, redirects to the result page on
+  completion, shows a clear retry path on error/quality-failure),
+  `result.html` (preview image + Download STL button). `main.py` now
+  mounts `/assets` as static files and serves each page at a clean route
+  (`/`, `/create`, `/job`, `/result`) from the same FastAPI process --
+  one Render service for both frontend and backend, no separate deploy
+  pipeline to keep in sync, which is why this milestone needed no new
+  hosting decisions.
+  `routes/create.py`'s job-status endpoint was reworked to never expose
+  this server's local filesystem paths to the client -- it now returns
+  `preview_url`/`download_url` (relative API paths) instead of the raw
+  `result` dict with absolute paths, and a new `GET /api/jobs/{id}/preview`
+  endpoint serves the preview PNG the same way `/download` already served
+  the STL. 6 new HTTP-level tests in `test_routes.py` (mocked Kaggle calls)
+  confirm the response never leaks a local path. 23/23 tests passing.
+
+  THE CRITICAL BUG: while manually testing the create form in a real
+  browser (per this project's own "test UI changes in a browser" rule --
+  the whole reason this was caught before it caused real harm), submitted
+  a deliberately fake, garbage Kaggle token to verify the form's error
+  handling. It did not error. The job was accepted and a real kernel got
+  pushed -- using the developer's own real Kaggle account, not "rejected
+  as invalid" like it should have been. This directly violates the
+  project's core security requirement (visitor jobs must run under the
+  VISITOR's account, never the developer's).
+  Root cause, found by reading the installed `kaggle`/`kagglesdk` package
+  source rather than guessing: this machine's kaggle CLI is version 2.2.4,
+  which resolves access-token auth through its own hardcoded order --
+  `KAGGLE_API_TOKEN` env var, then unconditionally
+  `~/.kaggle/access_token` on the real filesystem -- and never once
+  consults `KAGGLE_CONFIG_DIR` for that auth method (confirmed by reading
+  `kagglesdk/kaggle_env.py`'s `get_access_token_from_env()` directly).
+  `kaggle_client.py`'s original design (write the token to a temp dir, set
+  `KAGGLE_CONFIG_DIR` to that dir) was built against the OLDER kaggle.json
+  auth convention's documented behavior and silently did nothing on this
+  version -- every call fell straight through to the developer's real
+  `~/.kaggle/access_token`, regardless of what token was supplied.
+  Verified the diagnosis with a deliberately adversarial test before
+  trusting it: a `KAGGLE_CONFIG_DIR` pointed at a fresh directory
+  containing 40 random base64 bytes as the "token" still resolved to the
+  developer's real username and could list the developer's real kernels.
+  Fix: `kaggle_client._run_with_token` now passes the token via the
+  `KAGGLE_API_TOKEN` environment variable (the mechanism this CLI version
+  actually reads) for that one subprocess call, never written to any file
+  at all -- simpler than the original design, not just a patch over it.
+  Re-verified the fix the same adversarial way: a garbage `KAGGLE_API_TOKEN`
+  now correctly fails with "Authentication required," and the developer's
+  real token still resolves correctly via the same code path. Then
+  verified the fix through the actual running server (not just a script):
+  POSTing a fake token to `/api/create` now returns 401 as it always
+  should have; POSTing the real token still succeeds.
+  Practical impact of the bug, for the record: it was only ever
+  exercised against the developer's own account during local manual
+  testing, before any real visitor could reach this code (Render deploy
+  is still not live -- see "Known blockers"), so no other person's
+  request ever ran under the wrong account. Caught before it mattered
+  precisely because of the "verify in a real browser" habit, not because
+  the automated test suite would have caught it -- the mocked tests
+  couldn't have, since the bug was entirely in how a real `kaggle` CLI
+  install resolves credentials, which mocking papers over by design. That
+  gap has no full mitigation without shelling out to the real CLI in a
+  test, which the project's own working rules deliberately avoid for
+  quota-safety reasons on kernel-run calls -- the tradeoff is documented,
+  not silently accepted, since the manual-real-browser-test step is what
+  actually closed it.
+
+  Then re-ran the entire flow through the real browser end to end, for
+  real, after the fix: submitted "tool organizer, 3 slots, 5mm walls, 2mm
+  clearance, 60x20x180mm items" via the actual create form using the
+  developer's real token, watched the job page poll and auto-redirect to
+  the result page on completion, and confirmed the preview image (a
+  correctly-shaped 3-compartment organizer, genuinely rendered, not a
+  placeholder) and the Download STL button both served real files
+  (294KB PNG, 4.3KB STL) from the actual job.
+
+  Next: Milestone 4 -- content filter on prompts, rate limiting, custom
+  404, robots.txt, SEO basics (titles/meta/alt text already mostly in
+  place from this milestone; social share image and robots.txt are the
+  real gaps). The Render deploy confirmation from Milestone 1 is still
+  open and independent of this work.

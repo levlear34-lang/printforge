@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generating your model — PrintForge</title>
+<meta name="description" content="Your PrintForge model is being generated. This page updates automatically.">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links"></div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container">
+      <div class="status-card" id="status-card">
+        <div class="spinner" id="spinner"></div>
+        <h2 id="status-title">Submitting your request…</h2>
+        <p id="status-detail">This can take a few minutes — Kaggle needs to queue and run the job.</p>
+        <p id="status-sub"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/assets/app.js"></script>
+<script>
+const jobId = qs("id");
+const statusCard = document.getElementById("status-card");
+const spinner = document.getElementById("spinner");
+const statusTitle = document.getElementById("status-title");
+const statusDetail = document.getElementById("status-detail");
+const statusSub = document.getElementById("status-sub");
+
+if (!jobId) {
+  statusTitle.textContent = "No job specified";
+  statusDetail.textContent = "Start a new request from the create page.";
+  spinner.style.display = "none";
+} else {
+  poll();
+}
+
+const STATUS_COPY = {
+  submitted: ["Submitting your request…", "Pushing your job to Kaggle."],
+  running: ["Generating your model…", "Kaggle is queuing and running the job — this usually takes a few minutes."],
+};
+
+async function poll() {
+  try {
+    const job = await apiGet(`/api/jobs/${encodeURIComponent(jobId)}`);
+
+    if (job.status === "complete") {
+      window.location.href = `/result?id=${encodeURIComponent(jobId)}`;
+      return;
+    }
+    if (job.status === "error") {
+      spinner.style.display = "none";
+      statusTitle.textContent = "Something went wrong";
+      statusDetail.textContent = job.error || "The job failed. Please try again with a different request.";
+      statusSub.innerHTML = `<a href="/create" class="btn btn-primary" style="margin-top:16px">Try again</a>`;
+      return;
+    }
+    if (job.status === "quality_failed") {
+      spinner.style.display = "none";
+      statusTitle.textContent = "The model didn't pass validation";
+      statusDetail.textContent = job.error || "The generated mesh failed our quality checks. Try adjusting your request.";
+      statusSub.innerHTML = `<a href="/create" class="btn btn-primary" style="margin-top:16px">Try again</a>`;
+      return;
+    }
+
+    const copy = STATUS_COPY[job.status] || STATUS_COPY.running;
+    statusTitle.textContent = copy[0];
+    statusDetail.textContent = copy[1];
+    setTimeout(poll, 6000);
+  } catch (e) {
+    spinner.style.display = "none";
+    statusTitle.textContent = "Couldn't check job status";
+    statusDetail.textContent = e.message || "Please refresh the page to try again.";
+  }
+}
+</script>
+</body>
+</html>

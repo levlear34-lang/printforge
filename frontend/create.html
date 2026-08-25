@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create a model — PrintForge</title>
+<meta name="description" content="Describe your object and get back a downloadable, print-ready STL file.">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links"></div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container">
+      <h2>Describe what you want</h2>
+      <p class="section-sub">Exact measurements or a vague theme both work.</p>
+
+      <div class="form-card">
+        <div id="banner-slot"></div>
+
+        <form id="create-form">
+          <div class="field">
+            <label for="prompt">What should we make?</label>
+            <textarea id="prompt" name="prompt" placeholder="e.g. phone stand, 2 slots, 18 degrees — or — Batman themed phone holder" required></textarea>
+            <div class="field-hint" id="classification-hint"></div>
+          </div>
+
+          <div class="field" id="tier-field" style="display:none">
+            <label>Quality tier</label>
+            <div class="tier-options">
+              <div class="tier-option selected" data-tier="fast">
+                <h4>Fast (default)</h4>
+                <p>Quicker generation, uses less of your weekly Kaggle GPU quota.</p>
+              </div>
+              <div class="tier-option" data-tier="refined">
+                <h4>Refined</h4>
+                <p>Higher quality, takes noticeably longer and uses more GPU quota per run.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="token">Your Kaggle API token</label>
+            <input type="password" id="token" name="token" placeholder="Paste your Kaggle token" required autocomplete="off">
+            <div class="field-hint">Used only for this request. Never written to disk or logged.</div>
+            <details class="onboarding">
+              <summary>Don't have a Kaggle account?</summary>
+              <ol>
+                <li>Create a free account at kaggle.com</li>
+                <li>Go to Settings → API</li>
+                <li>Click "Create New Token"</li>
+                <li>Copy the token value and paste it above</li>
+              </ol>
+            </details>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submit-btn" style="width:100%">Generate my model</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/assets/app.js"></script>
+<script>
+const form = document.getElementById("create-form");
+const promptField = document.getElementById("prompt");
+const tierField = document.getElementById("tier-field");
+const tierOptions = document.querySelectorAll(".tier-option");
+const bannerSlot = document.getElementById("banner-slot");
+const classificationHint = document.getElementById("classification-hint");
+const submitBtn = document.getElementById("submit-btn");
+
+let selectedTier = "fast";
+let classifyTimer = null;
+
+tierOptions.forEach((el) => {
+  el.addEventListener("click", () => {
+    tierOptions.forEach((o) => o.classList.remove("selected"));
+    el.classList.add("selected");
+    selectedTier = el.dataset.tier;
+  });
+});
+
+function showBanner(kind, message) {
+  bannerSlot.innerHTML = message
+    ? `<div class="banner banner-${kind}">${message}</div>`
+    : "";
+}
+
+promptField.addEventListener("input", () => {
+  clearTimeout(classifyTimer);
+  const text = promptField.value.trim();
+  if (!text) {
+    tierField.style.display = "none";
+    classificationHint.textContent = "";
+    return;
+  }
+  classifyTimer = setTimeout(async () => {
+    try {
+      const result = await apiPost("/api/classify", { text });
+      if (result.classification === "creative") {
+        tierField.style.display = "block";
+        classificationHint.textContent = "This looks like a themed/creative request — pick a quality tier below.";
+      } else {
+        tierField.style.display = "none";
+        classificationHint.textContent = "This looks like a parametric request (has measurements) — no tier needed.";
+      }
+    } catch (e) {
+      // Classification is a UX nicety; a failure here shouldn't block submission.
+    }
+  }, 400);
+});
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  showBanner(null);
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Submitting…";
+
+  const text = promptField.value.trim();
+  const token = document.getElementById("token").value.trim();
+  const tierVisible = tierField.style.display !== "none";
+
+  try {
+    const body = { text, kaggle_token: token };
+    if (tierVisible) body.tier = selectedTier;
+    const result = await apiPost("/api/create", body);
+    window.location.href = `/job?id=${encodeURIComponent(result.job_id)}`;
+  } catch (e) {
+    showBanner("error", e.message || "Something went wrong. Please try again.");
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Generate my model";
+  }
+});
+</script>
+</body>
+</html>

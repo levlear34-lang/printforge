@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrintForge — describe it, print it</title>
+<meta name="description" content="Describe what you want in plain English and get back a validated, print-ready 3D model STL file. Free, powered by your own Kaggle account.">
+<link rel="stylesheet" href="/assets/style.css">
+<meta property="og:title" content="PrintForge — describe it, print it">
+<meta property="og:description" content="Turn a plain-English description into a downloadable, print-ready STL file.">
+<meta property="og:type" content="website">
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links">
+      <a href="/create" class="btn btn-primary">Create your model</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <section class="hero">
+    <div class="container">
+      <h1>Describe it. <span class="accent">Print it.</span></h1>
+      <p class="lead">
+        Type what you want — "phone stand, 2 slots, 18 degrees" or
+        "Batman themed phone holder" — and get back a validated,
+        print-ready STL file. Free, powered by your own Kaggle account.
+      </p>
+      <div class="hero-actions">
+        <a href="/create" class="btn btn-primary">Create your model</a>
+        <a href="#how-it-works" class="btn btn-secondary">How it works</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how-it-works">
+    <div class="container">
+      <h2>How it works</h2>
+      <p class="section-sub">No 3D modeling experience needed. Three steps, a few minutes.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Describe your object</h3>
+          <p>Exact measurements or a vague theme — both work. We figure out which pipeline fits your request.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Paste a free Kaggle token</h3>
+          <p>Generation runs on Kaggle's free GPU tier using your own account, so it costs you nothing.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Download your STL</h3>
+          <p>We validate the mesh for you — wall thickness, manifold geometry, printable size — then it's ready to slice.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>A real example</h2>
+      <p class="section-sub">Generated end to end by PrintForge, no manual cleanup.</p>
+      <div class="example">
+        <div>
+          <img src="/assets/example-phone-stand.png" alt="A generated 3D model preview of a two-slot angled phone stand, shown in gray shaded render" loading="lazy" width="700" height="500">
+        </div>
+        <div>
+          <div class="example-prompt">"phone stand, 2 slots, 18 degrees, 4mm walls, 3mm clearance, 70x12x150mm items"</div>
+          <p>Validated automatically: 0 non-manifold edges, envelope matched exactly to the request. Ready to slice as-is.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container">
+    <div>© PrintForge</div>
+    <div>Personal project. No affiliation with Kaggle.</div>
+  </div>
+</footer>
+
+<div class="sticky-cta">
+  <a href="/create" class="btn btn-primary">Create your model</a>
+</div>
+</body>
+</html>
