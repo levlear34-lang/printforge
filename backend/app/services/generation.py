@@ -9,7 +9,7 @@ import time
 from app.vendored.request_classifier import classify_request
 from app.vendored.request_parser import parse_request
 from app.vendored.design_agent import design_alternatives
-from app.services import jobs, kaggle_client, kernel_builder
+from app.services import content_filter, jobs, kaggle_client, kernel_builder, rate_limit
 
 GENERATED_ROOT = os.path.join(tempfile.gettempdir(), "printforge_generated")
 
@@ -20,10 +20,20 @@ class GenerationError(Exception):
         self.status_code = status_code
 
 
-def submit_request(text, token, tier=None):
+def submit_request(text, token, tier=None, ip=None):
     text = (text or "").strip()
     if not text:
         raise GenerationError("Please describe what you'd like to print.")
+
+    try:
+        content_filter.check_prompt(text)
+    except content_filter.ContentFilterError as exc:
+        raise GenerationError(str(exc), status_code=422) from exc
+
+    try:
+        rate_limit.check(ip)
+    except rate_limit.RateLimitError as exc:
+        raise GenerationError(str(exc), status_code=429) from exc
 
     classification = classify_request(text)
 
@@ -57,6 +67,7 @@ def submit_request(text, token, tier=None):
         token=token,
         kaggle_username=username,
         kernel_id=None,
+        ip=ip,
     )
 
     kernel_dir, kernel_id = kernel_builder.build_kernel("parametric", job_id, username, spec=spec)

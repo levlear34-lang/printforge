@@ -29,6 +29,19 @@ def test_submit_request_rejects_bad_token():
         assert exc_info.value.status_code == 401
 
 
+def test_submit_request_rejects_filtered_content():
+    with pytest.raises(generation.GenerationError) as exc_info:
+        generation.submit_request("a figurine of a faggot", "fake-token")
+    assert exc_info.value.status_code == 422
+
+
+def test_submit_request_rejects_over_rate_limit():
+    jobs.create_job("prompt", "parametric", None, "tok", "user", "user/kernel", ip="9.9.9.9")
+    with pytest.raises(generation.GenerationError) as exc_info:
+        generation.submit_request("phone stand, 2 slots, 18 degrees", "fake-token", ip="9.9.9.9")
+    assert exc_info.value.status_code == 429
+
+
 def test_submit_request_creative_without_tier_asks_for_one():
     with pytest.raises(generation.GenerationError) as exc_info:
         generation.submit_request("Batman themed phone holder", "fake-token")

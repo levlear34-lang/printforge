@@ -23,9 +23,10 @@ _LOCK = threading.Lock()
 _JOBS = {}
 
 MIN_RECHECK_INTERVAL_SECONDS = 10
+TERMINAL_STATUSES = ("complete", "error", "quality_failed")
 
 
-def create_job(prompt, classification, tier, token, kaggle_username, kernel_id):
+def create_job(prompt, classification, tier, token, kaggle_username, kernel_id, ip=None):
     job_id = uuid.uuid4().hex[:12]
     with _LOCK:
         _JOBS[job_id] = {
@@ -36,6 +37,7 @@ def create_job(prompt, classification, tier, token, kaggle_username, kernel_id):
             "token": token,
             "kaggle_username": kaggle_username,
             "kernel_id": kernel_id,
+            "ip": ip,
             "status": "submitted",
             "created_at": time.time(),
             "last_checked_at": 0.0,
@@ -43,6 +45,35 @@ def create_job(prompt, classification, tier, token, kaggle_username, kernel_id):
             "error": None,
         }
     return job_id
+
+
+def has_active_job(ip):
+    """True if this IP already has a job that hasn't reached a terminal
+    state -- used to enforce the "1 concurrent job per visitor" cap.
+    """
+    if not ip:
+        return False
+    with _LOCK:
+        return any(
+            job["ip"] == ip and job["status"] not in TERMINAL_STATUSES
+            for job in _JOBS.values()
+        )
+
+
+def count_submissions_since(ip, since_timestamp):
+    """Count this IP's job submissions at or after since_timestamp -- used
+    to enforce the daily-submissions cap. _JOBS is never pruned within a
+    process's lifetime, so this naturally includes the whole retained
+    history; acceptable for an in-memory, single-process store (see the
+    module docstring's known limitations).
+    """
+    if not ip:
+        return 0
+    with _LOCK:
+        return sum(
+            1 for job in _JOBS.values()
+            if job["ip"] == ip and job["created_at"] >= since_timestamp
+        )
 
 
 def get_job(job_id):

@@ -115,15 +115,15 @@ Not yet vendored/ported (deferred to when they're actually needed):
   added. See Progress Log.
 
 ## Status
-Milestones 2 and 3 (backend + frontend create flow) done and verified
-against real Kaggle infrastructure, including a real browser session
-clicking through the whole flow. Milestone 1's hosting-deploy confirmation
-is still pending (see "Known blockers" below, updated as it resolves).
+Milestones 2, 3, and 4 (backend + frontend create flow, content filter,
+rate limiting, SEO basics) done and verified against real Kaggle
+infrastructure and real HTTP requests. Milestone 1's hosting-deploy
+confirmation is still pending (see "Known blockers" below, updated as it
+resolves).
 
-## Current milestone: 4 — Content filter, rate limiting, SEO basics
-Content filter on prompts, rate limiting (concurrency cap + daily
-submissions per visitor), custom 404, robots.txt, page titles/meta/alt
-text/social image. See Progress Log for what's actually done.
+## Current milestone: 5 — Database, accounts, dashboard
+Supabase/Neon Postgres, signup/login, encrypted saved-token storage,
+dashboard with job history. See Progress Log for what's actually done.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -451,3 +451,72 @@ what's next.)
   place from this milestone; social share image and robots.txt are the
   real gaps). The Render deploy confirmation from Milestone 1 is still
   open and independent of this work.
+
+- 2026-08-25: Milestone 4 (content filter, rate limiting, SEO basics) —
+  done and verified via real HTTP requests, not just unit tests.
+
+  `backend/app/services/content_filter.py`: whole-word, case-insensitive
+  keyword match across three categories the spec names (hate speech,
+  sexual content, explicit violence). Deliberately "basic" per the spec's
+  own wording -- a modest starter wordlist, not a trained classifier or an
+  attempt at a canonical/exhaustive list; documented in the module
+  docstring as a known limitation (won't catch leetspeak/evasion) rather
+  than oversold. Rejects with a clear message (never silently drops), per
+  the explicit spec requirement.
+
+  `backend/app/services/rate_limit.py` + additions to `jobs.py`
+  (`has_active_job`, `count_submissions_since`, a new `ip` field on job
+  records): enforces 1 concurrent job and 5 submissions/day per IP --
+  judgment call on the actual numbers, documented in the module docstring
+  as generous enough for real experimentation, tight enough to stop a
+  single visitor from flooding the job store. IP-based, not
+  session/account-based, since there's still no auth (Milestone 5 can add
+  an account-based layer on top later without removing this one).
+  `routes/create.py` resolves the visitor's IP from `X-Forwarded-For`
+  first (Render terminates TLS at a reverse proxy, so
+  `request.client.host` would otherwise always be the proxy's internal
+  address, not the real visitor) with a `request.client.host` fallback for
+  local dev. Both are wired into `generation.submit_request` (422 for
+  filtered content, 429 for rate limit), checked before any Kaggle API
+  call so a blocked/limited request never wastes a real round trip.
+
+  Custom 404: `frontend/404.html` (styled to match the site) served via a
+  FastAPI 404 exception handler that checks the request path -- `/api/*`
+  routes keep returning JSON (the frontend JS already handles a job/asset
+  404 as a normal response), everything else gets the styled page.
+  `frontend/robots.txt` (allow everything except `/api/`, `/job`,
+  `/result` -- those are per-visitor session pages, not content worth
+  indexing) served at `/robots.txt`.
+
+  SEO: added Open Graph + Twitter Card meta tags to the landing page,
+  reusing the real phone-stand preview image from Milestone 2 (not a
+  placeholder) as the social share image. Noted directly in the HTML as a
+  comment: the image URL is relative for now since the final Render
+  domain isn't confirmed yet -- switch to an absolute URL once it is,
+  since some platforms only resolve absolute image URLs for link
+  previews. Audited all 5 pages (`index`, `create`, `job`, `result`,
+  `404`) for unique titles/meta descriptions and confirmed both `<img>`
+  tags have real (not filler) alt text -- all were already in decent
+  shape from Milestone 3's build, so this was mostly verification, not
+  new work.
+
+  17 new tests (`test_content_filter.py`, `test_rate_limit.py`, plus
+  submit_request-level wiring tests in `test_generation.py` and
+  404/robots tests in `test_health.py`). 40/40 tests passing.
+
+  Then verified for real against a live server, not just mocks: POSTed a
+  filtered term to `/api/create` and got a real 422 with the expected
+  message; submitted two real jobs back-to-back using the developer's
+  real Kaggle token from the same client and confirmed the second was
+  rejected with a real 429 ("You already have a job in progress");
+  confirmed `/robots.txt`, an unknown page route (styled 404 HTML), and
+  an unknown `/api/` route (JSON 404) all behave correctly; confirmed the
+  new Open Graph/Twitter meta tags render in the actual served HTML.
+
+  Next: Milestone 5 -- Supabase/Neon Postgres, account signup/login,
+  encrypted saved-token storage, dashboard with job history. This is the
+  first milestone that needs a real external account/credential the
+  developer has to provision (a Supabase or Neon project + DATABASE_URL),
+  same shape of blocker as Milestone 1's Render deploy -- will flag which
+  of Supabase/Neon to ask for once the design work makes that concrete,
+  rather than guessing which free-tier Postgres host to commit to.

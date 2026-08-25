@@ -1,10 +1,11 @@
-"""Milestone 2/3: anonymous create-flow endpoints + the pages that use them.
+"""Milestone 2/3/4: anonymous create-flow endpoints + the pages that use them.
 
-No auth, no rate limiting, no content filter yet (those are Milestone 4/5).
+No auth yet (Milestone 5). Content filter and per-IP rate limiting are
+enforced in generation.submit_request (Milestone 4).
 """
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -19,10 +20,24 @@ class CreateRequest(BaseModel):
     tier: str | None = None
 
 
+def _client_ip(request: Request) -> str:
+    """Render (and most PaaS) terminate TLS at a reverse proxy, so the real
+    visitor IP arrives via X-Forwarded-For, not request.client.host (that's
+    the proxy's internal address). Falls back to request.client.host for
+    local dev, where there's no proxy in front.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/create")
-def create(payload: CreateRequest):
+def create(payload: CreateRequest, request: Request):
     try:
-        job_id = generation.submit_request(payload.text, payload.kaggle_token, payload.tier)
+        job_id = generation.submit_request(
+            payload.text, payload.kaggle_token, payload.tier, ip=_client_ip(request),
+        )
     except generation.GenerationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return {"job_id": job_id}

@@ -24,6 +24,25 @@ def test_create_and_job_and_result_pages_serve_html():
         assert "text/html" in response.headers["content-type"]
 
 
+def test_unknown_page_route_serves_custom_404_html():
+    response = client.get("/this-page-does-not-exist")
+    assert response.status_code == 404
+    assert "text/html" in response.headers["content-type"]
+    assert "404" in response.text
+
+
+def test_unknown_api_route_stays_json():
+    response = client.get("/api/this-does-not-exist")
+    assert response.status_code == 404
+    assert "application/json" in response.headers["content-type"]
+
+
+def test_robots_txt_served():
+    response = client.get("/robots.txt")
+    assert response.status_code == 200
+    assert "User-agent" in response.text
+
+
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200

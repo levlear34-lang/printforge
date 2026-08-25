@@ -8,7 +8,9 @@ as kaggle_kernel/ living outside backend/ too.
 """
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -55,6 +57,22 @@ def job_page():
 @app.get("/result")
 def result_page():
     return _page("result.html")
+
+
+@app.get("/robots.txt")
+def robots():
+    return FileResponse(os.path.join(FRONTEND_DIR, "robots.txt"), media_type="text/plain")
+
+
+@app.exception_handler(404)
+async def not_found(request: Request, exc: HTTPException):
+    """API 404s stay JSON (a job/asset genuinely not existing is a normal,
+    programmatic response the frontend JS handles) -- only page routes get
+    the styled 404.html.
+    """
+    if request.url.path.startswith("/api/"):
+        return await http_exception_handler(request, exc)
+    return FileResponse(os.path.join(FRONTEND_DIR, "404.html"), status_code=404)
 
 
 @app.get("/api/status")
