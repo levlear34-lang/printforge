@@ -157,9 +157,13 @@ on Render for accounts to fully work end-to-end (DB connectivity itself is
 confirmed fine) -- see "Known blockers".
 
 ## Current milestone: 7 — Analytics, cookie consent, final polish
-Google Analytics + cookie consent, sticky mobile CTA (already done in
-Milestone 3), final polish pass, full manual smoke test of the entire flow
-end to end. See Progress Log for what's actually done.
+Google Analytics + cookie consent (done), sticky mobile CTA (already done
+in Milestone 3), final polish pass (done). The remaining "full manual
+smoke test of the entire flow end to end... both fast and refined tiers"
+is genuinely blocked, not just untested -- creative-tier generation was
+deferred back in Milestone 2 and never built, so there is no fast/refined
+flow to smoke-test yet. See Progress Log and the note at the end of this
+section.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -782,3 +786,94 @@ what's next.)
   (anonymous + logged-in, fast + refined tiers) once creative-tier
   generation and the remaining Render env vars are both in place. Sticky
   mobile CTA was already done back in Milestone 3.
+
+- 2026-08-26: Milestone 7 (Analytics, cookie consent, final polish) --
+  Google Analytics + cookie consent and the polish pass are done; the
+  "full smoke test... fast + refined tiers" item is not, for a real
+  reason explained at the end of this entry, not an oversight.
+
+  `app.js` gained `initCookieConsent()` (runs automatically on every page
+  that loads app.js -- no per-page script changes needed) and
+  `loadGoogleAnalytics()`. GA is never loaded until the visitor explicitly
+  clicks Accept; Decline persists just as durably. `GA_MEASUREMENT_ID` is
+  a placeholder (`"G-XXXXXXXXXX"`) with an explicit guard that skips
+  loading the gtag script entirely while it's still a placeholder, so
+  nothing broken ships before a real GA4 property exists -- per the
+  developer's choice not to set one up yet, this is intentionally
+  deferred, documented as a single constant to swap later (not a secret,
+  safe to just paste in when ready).
+
+  Real bug found while verifying this the hard way (see below for how
+  hard): the cookie banner (`position: fixed`, higher z-index) visually
+  covered the landing page's sticky mobile CTA -- the site's main
+  conversion button -- for as long as the banner was showing. Fixed by
+  hiding the sticky CTA while the banner is up and restoring it
+  (via clearing the inline override, not hardcoding it back to `block`,
+  so desktop widths aren't affected) once the visitor decides either way.
+
+  Also fixed, unrelated to cookie consent but found in the same pass:
+  `/assets/*` (JS/CSS) had no `Cache-Control` header at all, which lets
+  browsers cache them indefinitely on their own heuristics with zero
+  revalidation. This project has no build-hash/versioning pipeline for
+  static assets, so a deploy that changes app.js/style.css could leave
+  returning visitors silently running old client code indefinitely.
+  Added a small middleware setting `Cache-Control: no-cache` on
+  `/assets/` responses -- forces revalidation (a cheap 304 when
+  unchanged) on every load instead of trusting a possibly-stale copy.
+
+  How the sticky-CTA bug was actually found and verified is worth
+  recording: this session's browser tool had accumulated a very
+  long-lived, aggressively cached copy of `/assets/app.js` and
+  `style.css` from hours of earlier testing in this same conversation,
+  and neither a normal reload, a hard-refresh keystroke, nor opening
+  brand-new tabs would make it re-fetch either file (a real illustration
+  of exactly the caching gap the Cache-Control fix above addresses).
+  Repeated script-tag re-injection attempts to force a fresh copy hit a
+  second, different dead end: a page can only declare a top-level `const`
+  once, so every re-injection after the first threw a silent
+  `SyntaxError: Identifier 'GA_MEASUREMENT_ID' has already been
+  declared`, leaving the OLD function definition bound and making it look
+  like the fix wasn't taking effect at all, when actually the new script
+  simply never ran. Correctly diagnosed by reading the browser's own
+  console error output rather than continuing to guess, then verified
+  cleanly and unambiguously in a single-execution, cache-free context
+  (constructed an isolated `<iframe>`, fetched the live HTML/CSS/JS with
+  `cache: 'no-store'`, and wrote them into the iframe directly) --
+  confirmed the sticky CTA correctly hides while the banner shows and
+  restores correctly after Accept/Decline, and separately confirmed via
+  the raw HTTP response body (not a DOM read that could itself be stale)
+  that the server was serving the fixed code all along. Also found and
+  cleaned up multiple duplicate local dev-server processes left over from
+  earlier milestones' testing, all bound to the same port -- unrelated to
+  the real bug but worth doing since it was actively confusing the
+  diagnosis.
+
+  91/91 tests still passing (no backend logic changed this milestone,
+  frontend-only).
+
+  Live progress on the two open Render items from Milestone 6: the
+  developer confirmed setting `SESSION_SECRET`/`TOKEN_ENCRYPTION_KEY`, but
+  a live retest still returns the same "SESSION_SECRET is not configured"
+  error -- Render doesn't always auto-redeploy on an env var change (or
+  hasn't yet); flagged to the developer that a manual "Deploy latest
+  commit" may be needed, will retest once that happens rather than
+  assuming the env vars are the problem.
+
+  The genuine scope gap, stated plainly rather than glossed over: this
+  milestone's plan assumed creative-tier (fast/refined) generation would
+  already exist by now, since the original 7-milestone plan didn't
+  anticipate deferring it. It was deferred in Milestone 2 as real,
+  tracked follow-up work (porting AI_3D_FACTORY's Shap-E/SD->TripoSR
+  Kaggle kernels plus the portable-Blender print-readiness stage that was
+  never built for the Kaggle-hosted-Blender architecture this project
+  uses) -- and it still hasn't been picked back up. That makes
+  "full manual smoke test... both fast and refined tiers" impossible to
+  actually do right now, not merely undone. Raised to the developer as a
+  real decision point: build creative-tier generation now (a body of work
+  comparable in size to Milestone 2) before considering v1 complete, or
+  explicitly accept parametric-only as the v1 scope and revisit creative
+  generation later.
+
+  Next: pending the developer's answer on creative-tier scope, plus
+  confirming the Render env vars actually took effect (delete the
+  developer's requested test-account cleanup once login works).

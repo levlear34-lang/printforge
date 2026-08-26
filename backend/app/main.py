@@ -53,6 +53,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def no_cache_for_assets(request: Request, call_next):
+    """StaticFiles sends Last-Modified/ETag but no Cache-Control, which lets
+    browsers cache indefinitely on their own heuristics -- found for real
+    while testing Milestone 7's cookie-consent JS: a long-lived dev browser
+    session kept serving a stale app.js from disk cache without even
+    revalidating with the server. no-cache forces revalidation (a cheap
+    304 when unchanged) on every load instead of trusting a stale copy --
+    important since this app has no build-hash/versioning pipeline for
+    static assets to bust the cache on deploy otherwise.
+    """
+    response = await call_next(request)
+    if request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
 
 

@@ -44,3 +44,68 @@ async function initAuthNav(slotId) {
     slot.innerHTML = `<a href="/login">Log in</a>`;
   }
 }
+
+// Milestone 7: Google Analytics, gated behind cookie consent -- GA is never
+// loaded until the visitor explicitly accepts. GA_MEASUREMENT_ID is a
+// placeholder until a real GA4 property exists (not a secret -- it's
+// public in every page's source once real -- so just swap this one
+// constant, no other code changes needed).
+const GA_MEASUREMENT_ID = "G-XXXXXXXXXX";
+const COOKIE_CONSENT_KEY = "pf_cookie_consent";
+
+function loadGoogleAnalytics() {
+  if (GA_MEASUREMENT_ID.includes("XXXX")) return; // still a placeholder -- don't load a broken tag
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`;
+  document.head.appendChild(script);
+  window.dataLayer = window.dataLayer || [];
+  function gtag() { window.dataLayer.push(arguments); }
+  gtag("js", new Date());
+  gtag("config", GA_MEASUREMENT_ID);
+  window.gtag = gtag;
+}
+
+function initCookieConsent() {
+  const decision = localStorage.getItem(COOKIE_CONSENT_KEY);
+  if (decision === "accepted") {
+    loadGoogleAnalytics();
+    return;
+  }
+  if (decision === "declined") return;
+
+  const banner = document.createElement("div");
+  banner.className = "cookie-banner";
+  banner.innerHTML = `
+    <p>We use cookies for basic site analytics (page views, general traffic patterns) -- never to build an individual profile of you. <a href="/privacy">Privacy Policy</a></p>
+    <div class="cookie-banner-actions">
+      <button class="btn btn-secondary" id="cookie-decline">Decline</button>
+      <button class="btn btn-primary" id="cookie-accept">Accept</button>
+    </div>
+  `;
+  document.body.appendChild(banner);
+
+  // The landing page's sticky mobile CTA shares the bottom of the screen --
+  // without this, the cookie banner (higher z-index) visually covers it,
+  // hiding the site's main conversion button behind a consent prompt.
+  const stickyCta = document.querySelector(".sticky-cta");
+  if (stickyCta) stickyCta.style.display = "none";
+
+  const restoreStickyCta = () => {
+    if (stickyCta) stickyCta.style.display = ""; // let the CSS media query decide again
+  };
+
+  document.getElementById("cookie-accept").addEventListener("click", () => {
+    localStorage.setItem(COOKIE_CONSENT_KEY, "accepted");
+    banner.remove();
+    restoreStickyCta();
+    loadGoogleAnalytics();
+  });
+  document.getElementById("cookie-decline").addEventListener("click", () => {
+    localStorage.setItem(COOKIE_CONSENT_KEY, "declined");
+    banner.remove();
+    restoreStickyCta();
+  });
+}
+
+initCookieConsent();
