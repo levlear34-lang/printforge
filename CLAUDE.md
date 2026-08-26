@@ -89,6 +89,13 @@ branding throughout.
 - `frontend/signup.html`, `login.html`, `dashboard.html` — account pages;
   `create.html` now checks `/api/me` and offers a saved-token toggle for
   signed-in visitors instead of always requiring a pasted token
+- `backend/app/routes/feedback.py` — `POST /api/feedback` (public) and
+  `GET /api/admin/feedback` (gated by a shared `ADMIN_TOKEN` secret,
+  compared with `secrets.compare_digest` -- no full admin-user system,
+  per the spec's "don't over-build this" for v1)
+- `frontend/feedback.html`, `thank-you.html`, `faq.html`, `terms.html`,
+  `privacy.html`, `admin.html` — feedback flow, FAQ, legal pages, and the
+  minimal token-gated admin view (`noindex`, not linked from any public nav)
 - `backend/tests/` — pytest suite
 - `render.yaml`, `Procfile` — deploy config for Render/Railway
 - `frontend/` — landing (`index.html`), create form (`create.html`), job
@@ -136,18 +143,23 @@ Not yet vendored/ported (deferred to when they're actually needed):
   added. See Progress Log.
 
 ## Status
-Milestones 2, 3, and 4 (backend + frontend create flow, content filter,
-rate limiting, SEO basics) done and verified against real Kaggle
-infrastructure and real HTTP requests. Milestone 5 (database, accounts,
-dashboard) is built and unit-tested (all DB calls mocked, no real Postgres
-available in this dev environment); live verification against a real
-Supabase instance is pending the developer finishing their connection
-setup (see Progress Log and "Known blockers"). Milestone 1's hosting-deploy
-confirmation is also still pending.
+Milestones 1-5 are done, and Milestone 1's hosting-deploy confirmation
+(long pending) is now closed out -- the site is genuinely live at
+https://printforge-bbs1.onrender.com, verified with real requests against
+the real deployment, not just locally. Milestone 5's Supabase connection
+is confirmed working for real (a live signup created a real row). Two real
+production bugs were found and fixed only by testing the live deploy
+rather than trusting local/mocked tests: a missing `kaggle` dependency
+(only ever installed by hand locally, never declared) and an unhandled
+exception path in signup/login when `SESSION_SECRET` isn't set. The
+developer still needs to set `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY`
+on Render for accounts to fully work end-to-end (DB connectivity itself is
+confirmed fine) -- see "Known blockers".
 
-## Current milestone: 6 — Feedback, FAQ, Terms, Privacy
-Feedback form + admin view, FAQ page, Terms of Use, Privacy Policy, Kaggle
-onboarding help content. See Progress Log for what's actually done.
+## Current milestone: 7 — Analytics, cookie consent, final polish
+Google Analytics + cookie consent, sticky mobile CTA (already done in
+Milestone 3), final polish pass, full manual smoke test of the entire flow
+end to end. See Progress Log for what's actually done.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -190,19 +202,20 @@ assistant does without the account owner present).
 - GitHub: resolved. Repo is pushed to
   https://github.com/levlear34-lang/printforge (developer created the empty
   repo, Claude added the remote and pushed).
-- Render: developer is setting up the account/connection on their end
-  (in progress as of Milestone 2) — `render.yaml` is prepared and tested
-  against the current backend. Deploy confirmation still pending a live URL.
-- Database: developer has a Supabase project set up (in progress as of
-  Milestone 5) and is working through connecting it -- Supabase's UI
-  showed an IPv6-only warning under one pooler option, which would have
-  been a real deploy blocker against Render (IPv4-only egress); pointed
-  the developer at the free, IPv4-compatible shared Supavisor pooler
-  (`aws-0-<region>.pooler.supabase.com:6543`) instead of the paid
-  IPv4-add-on path, verified via Supabase's own docs before answering
-  rather than guessing. `DATABASE_URL` still needs to be set once that's
-  sorted; the app boots and works without it (see Progress Log), only
-  account/dashboard routes are blocked in the meantime.
+- Render: resolved. Live at https://printforge-bbs1.onrender.com, confirmed
+  with real requests (not just "the build succeeded").
+- Database: resolved for connectivity -- `DATABASE_URL` is set on Render
+  and confirmed working with a real write (a live signup created a real
+  row in the `users` table; see Progress Log for the full diagnosis story,
+  including the free-vs-paid Supabase pooler question). Still open:
+  `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY` are not yet set on Render --
+  signup/login currently fail with a clear "SESSION_SECRET is not
+  configured" error until the developer sets them (generation commands in
+  `.env.example`). Everything else on the live site works fully without
+  them in the meantime.
+- Admin view: `ADMIN_TOKEN` (new in Milestone 6) is not yet set on Render
+  either -- same pattern, same fix (developer generates and sets it,
+  nothing for Claude to provision).
 
 ## Progress Log
 (Append a dated entry after each milestone — what changed, what passed,
@@ -668,3 +681,104 @@ what's next.)
   confirmed working, close the loop on Milestone 5 with a real signup ->
   save token -> submit a job -> see it on the dashboard walkthrough
   against the developer's actual Supabase instance.
+
+- 2026-08-26: Live-deploy verification (closing out Milestone 1's long-open
+  item, and the first real check of Milestone 5's Supabase connection) --
+  done, with two real production bugs found and fixed along the way. The
+  developer confirmed `DATABASE_URL` was set on Render and shared the live
+  URL (https://printforge-bbs1.onrender.com); rather than trust that and
+  move on, actually exercised it.
+
+  Bug 1: `curl`-ing `/api/signup` on the live site returned a bare 500.
+  Root cause, found by reading `backend/requirements.txt`: the `kaggle`
+  package was never actually declared as a dependency -- it only ever
+  worked in every prior milestone's testing because it happened to be
+  installed system-wide on this dev machine by hand back in an early
+  session, completely outside the project's own dependency management.
+  Render's fresh build would never have had it, meaning the entire create
+  flow (which shells out to `python -m kaggle`) would have been broken on
+  the live site regardless of anything else -- caught before a real
+  visitor could hit it, not after. Fixed by adding `kaggle==2.2.4`
+  (matching the version verified throughout this project) to
+  requirements.txt.
+
+  Bug 2, found on the very next live attempt after fixing bug 1: signup
+  still 500'd, but retrying with the same email returned a proper 409
+  "already exists" -- proof the database write itself had actually
+  succeeded on the first attempt (so `DATABASE_URL`/Supabase connectivity
+  was confirmed genuinely working), and the crash was happening
+  afterward. Root cause: `routes/auth.py`'s `signup`/`login` handlers only
+  wrapped the `accounts.signup()`/`accounts.login()` call in a
+  try/except -- the following `_set_session_cookie()` call (which raises
+  `auth.AuthError` if `SESSION_SECRET` isn't configured) was outside that
+  block, so that specific failure was never caught and surfaced as a raw,
+  unhandled 500 instead of the clean JSON error the code was clearly
+  supposed to produce. Fixed by moving the session-cookie call inside the
+  same try/except. Re-verified live after the fix: the same request now
+  returns a clean `{"detail":"SESSION_SECRET is not configured on the
+  server."}` instead of a crash -- which also serves as definitive proof
+  of the diagnosis, not just a guess that happened to compile.
+
+  Side effect worth recording plainly: this diagnosis process created one
+  real row in the developer's production `users` table
+  (`claude-verify-test@example.com`, plus a couple of throwaway polling
+  attempts like `claude-verify-poll-5@example.com`) -- just an email and a
+  bcrypt hash, nothing sensitive, but flagged to the developer rather than
+  left silently in their database. Offered to clean it up once
+  login works.
+
+  Net result: Milestone 1's deploy confirmation is genuinely done (the
+  site is live and responding to real requests), and Milestone 5's
+  database connectivity is genuinely confirmed (not just "should work").
+  Still open: `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY` need to be set
+  on Render before accounts fully work end-to-end -- everything else on
+  the live site is unaffected and working.
+
+- 2026-08-26: Milestone 6 (feedback, FAQ, Terms of Use, Privacy Policy) --
+  done. Built while the developer works on setting the remaining Render
+  env vars, so no live account-flow verification yet (same graceful-
+  degradation pattern already established: tested locally without
+  `DATABASE_URL`/`SESSION_SECRET` and confirmed the feedback form
+  correctly surfaces the same clean "database isn't configured" error
+  through the actual UI, not a crash).
+
+  `schema.sql` gained a third table, `feedback` (rating + free-text
+  message, no `user_id` -- the feedback page doesn't require login, by
+  design). `routes/feedback.py`: `POST /api/feedback` (public, rejects
+  a rating outside 1-5 or a completely empty submission) and
+  `GET /api/admin/feedback` (gated by a shared `ADMIN_TOKEN` secret
+  compared with `secrets.compare_digest` to avoid a timing side channel --
+  matching the discipline already used for password/session comparisons
+  elsewhere in this project). Deliberately not a full admin-user/role
+  system, per the spec's explicit "don't over-build this" for v1.
+
+  Frontend: `feedback.html` (star rating + comment, redirects to
+  `thank-you.html` on success), `faq.html` (the 5 required questions --
+  what's a Kaggle token, why refined takes longer, is my token stored,
+  what can I print this on, is this free -- plus 2 more that came up
+  naturally: file retention, and an honest note that creative/themed
+  generation isn't live yet even though the tier picker already exists in
+  the UI), `terms.html` and `privacy.html` (plain-language, covering the
+  specific points the spec called for: user responsibility for
+  printed/generated content, no quality guarantee, token-storage policy,
+  and -- in the privacy policy -- a forward-looking disclosure of Google
+  Analytics use, since Milestone 7 (next) adds it alongside the required
+  cookie-consent notice; flagging this explicitly rather than letting it
+  read as already-true when it technically ships next milestone).
+  `admin.html`: token-gated, `noindex`, not linked from any public nav --
+  paste the admin token, load feedback, no persistent admin session.
+  Added a shared footer (FAQ/Feedback/Terms/Privacy links) to every public
+  page via a small script, and extended `robots.txt` to disallow
+  `/dashboard`, `/admin`, `/thank-you` alongside the existing
+  `/job`/`/result` exclusions.
+
+  8 new tests in `test_feedback_routes.py` (rating validation, empty-
+  submission rejection, admin-token auth including the
+  not-configured-yet case) -- 91/91 tests passing project-wide.
+
+  Next: Milestone 7 -- Google Analytics + cookie consent (making the
+  privacy policy's analytics disclosure actually true), final polish
+  pass, and a full manual smoke test of the entire flow end to end
+  (anonymous + logged-in, fast + refined tiers) once creative-tier
+  generation and the remaining Render env vars are both in place. Sticky
+  mobile CTA was already done back in Milestone 3.

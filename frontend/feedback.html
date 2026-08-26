@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feedback — PrintForge</title>
+<meta name="description" content="Tell us what you think of PrintForge — ratings and comments help us improve.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.star-rating { display: flex; gap: 8px; font-size: 1.8rem; }
+.star-rating button {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--border); line-height: 1;
+}
+.star-rating button.active { color: var(--accent); }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links"><span id="auth-nav-slot"></span></div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container">
+      <h2>Feedback</h2>
+      <p class="section-sub">A rating, a comment, or both — whatever's useful.</p>
+
+      <div class="form-card">
+        <div id="banner-slot"></div>
+        <form id="feedback-form">
+          <div class="field">
+            <label>Rating</label>
+            <div class="star-rating" id="star-rating">
+              <button type="button" data-value="1">★</button>
+              <button type="button" data-value="2">★</button>
+              <button type="button" data-value="3">★</button>
+              <button type="button" data-value="4">★</button>
+              <button type="button" data-value="5">★</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="message">Comments</label>
+            <textarea id="message" placeholder="What worked, what didn't, what you'd like to see"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" id="submit-btn" style="width:100%">Send feedback</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>
+  <div class="container">
+    <div>
+      <a href="/faq">FAQ</a>
+      <a href="/feedback">Feedback</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </div>
+    <div>© PrintForge. Personal project, no affiliation with Kaggle.</div>
+  </div>
+</footer>
+
+
+<script src="/assets/app.js"></script>
+<script>
+initAuthNav("auth-nav-slot");
+
+let rating = null;
+const stars = document.querySelectorAll("#star-rating button");
+stars.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    rating = parseInt(btn.dataset.value, 10);
+    stars.forEach((b) => b.classList.toggle("active", parseInt(b.dataset.value, 10) <= rating));
+  });
+});
+
+const form = document.getElementById("feedback-form");
+const bannerSlot = document.getElementById("banner-slot");
+const submitBtn = document.getElementById("submit-btn");
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  bannerSlot.innerHTML = "";
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Sending…";
+  try {
+    await apiPost("/api/feedback", { rating, message: document.getElementById("message").value.trim() });
+    window.location.href = "/thank-you";
+  } catch (e) {
+    bannerSlot.innerHTML = `<div class="banner banner-error">${e.message || "Something went wrong."}</div>`;
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Send feedback";
+  }
+});
+</script>
+</body>
+</html>

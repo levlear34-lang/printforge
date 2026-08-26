@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — PrintForge</title>
+<meta name="description" content="What PrintForge collects, what it doesn't, and why.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.legal { max-width: 720px; }
+.legal h3 { margin-top: 32px; }
+.legal p, .legal li { color: var(--text-muted); }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links"><span id="auth-nav-slot"></span></div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container legal">
+      <h2>Privacy Policy</h2>
+      <p style="color:var(--text-muted)">Last updated: August 2026.</p>
+
+      <h3>What we collect</h3>
+      <ul>
+        <li><strong>If you create an account:</strong> your email address and a hashed (not plain-text) password.</li>
+        <li><strong>Your prompts:</strong> the text you submit is sent to a Kaggle kernel to generate your model. If you're signed in, your prompt and job status are kept in your dashboard history until it expires or you delete it. Anonymous requests are not saved anywhere past the session needed to generate and deliver your file.</li>
+        <li><strong>Feedback you submit:</strong> rating and/or comments, not tied to your identity unless you happen to mention it yourself.</li>
+        <li><strong>Basic analytics:</strong> once you accept the cookie notice, we use Google Analytics to understand general usage patterns (page views, rough traffic sources) — not to build an individual profile of you.</li>
+      </ul>
+
+      <h3>What we don't collect</h3>
+      <p>We never store your raw Kaggle token unless you're signed in and explicitly choose to save it — and even then, it's encrypted at rest, never logged, and never shown back to you in plain text. If you paste a token without saving it, it exists only in server memory for the duration of that one request and is discarded afterward.</p>
+
+      <h3>Where your data lives</h3>
+      <p>Account and job-history data is stored in a Postgres database (Supabase). Generated files (STL, preview images) are stored on the application server's disk and expire automatically after 7 days, or immediately if you delete the entry from your dashboard.</p>
+
+      <h3>Third parties</h3>
+      <p>Your prompt (and, for anonymous use, your pasted token) is sent to Kaggle to run generation — subject to Kaggle's own privacy policy. We use Google Analytics for basic site-usage metrics, subject to Google's privacy policy. We don't sell your data or share it with anyone else.</p>
+
+      <h3>Cookies</h3>
+      <p>We use a session cookie (if you're signed in) to keep you logged in, and — only after you accept the cookie notice — analytics cookies from Google Analytics. You can decline analytics cookies and still use the full site.</p>
+
+      <h3>Your choices</h3>
+      <p>Delete your saved Kaggle token, individual job history entries, or your entire account (which cascades to delete your history) at any time from your dashboard.</p>
+
+      <h3>International visitors</h3>
+      <p>PrintForge may have visitors outside the country it's operated from. By using the site, you consent to your information being processed as described here.</p>
+    </div>
+  </section>
+</main>
+<footer>
+  <div class="container">
+    <div>
+      <a href="/faq">FAQ</a>
+      <a href="/feedback">Feedback</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </div>
+    <div>© PrintForge. Personal project, no affiliation with Kaggle.</div>
+  </div>
+</footer>
+
+
+<script src="/assets/app.js"></script>
+<script>initAuthNav("auth-nav-slot");</script>
+</body>
+</html>

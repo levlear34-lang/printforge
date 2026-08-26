@@ -223,3 +223,23 @@ def delete_job_history(job_id, user_id):
             (job_id, user_id),
         )
         conn.commit()
+
+
+def create_feedback(rating, message):
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO feedback (rating, message) VALUES (%s, %s)",
+            (rating, message),
+        )
+        conn.commit()
+
+
+def list_feedback():
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, rating, message, created_at FROM feedback ORDER BY created_at DESC"
+        ).fetchall()
+        return [
+            {"id": row[0], "rating": row[1], "message": row[2], "created_at": row[3]}
+            for row in rows
+        ]

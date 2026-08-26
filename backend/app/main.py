@@ -23,6 +23,7 @@ from app.vendored.request_classifier import classify_request
 from app.routes.create import router as create_router
 from app.routes.auth import router as auth_router
 from app.routes.dashboard import router as dashboard_router
+from app.routes.feedback import router as feedback_router
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONTEND_DIR = os.path.join(REPO_ROOT, "frontend")
@@ -43,6 +44,7 @@ app = FastAPI(title="PrintForge API", lifespan=lifespan)
 app.include_router(create_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
+app.include_router(feedback_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -91,6 +93,36 @@ def login_page():
 @app.get("/dashboard")
 def dashboard_page():
     return _page("dashboard.html")
+
+
+@app.get("/feedback")
+def feedback_page():
+    return _page("feedback.html")
+
+
+@app.get("/thank-you")
+def thank_you_page():
+    return _page("thank-you.html")
+
+
+@app.get("/faq")
+def faq_page():
+    return _page("faq.html")
+
+
+@app.get("/terms")
+def terms_page():
+    return _page("terms.html")
+
+
+@app.get("/privacy")
+def privacy_page():
+    return _page("privacy.html")
+
+
+@app.get("/admin")
+def admin_page():
+    return _page("admin.html")
 
 
 @app.get("/robots.txt")

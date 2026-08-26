@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Use — PrintForge</title>
+<meta name="description" content="Terms for using PrintForge.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.legal { max-width: 720px; }
+.legal h3 { margin-top: 32px; }
+.legal p, .legal li { color: var(--text-muted); }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links"><span id="auth-nav-slot"></span></div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container legal">
+      <h2>Terms of Use</h2>
+      <p style="color:var(--text-muted)">Last updated: August 2026. This is a personal project, written in plain language rather than formal legal boilerplate.</p>
+
+      <h3>What this is</h3>
+      <p>PrintForge turns a text description into a 3D-printable STL file, using your own Kaggle account's free GPU compute to run the actual generation. It's a personal project, not a company or a commercial product.</p>
+
+      <h3>You're responsible for what you generate and print</h3>
+      <p>You're responsible for the prompts you submit and for whatever you choose to print from the resulting file. Don't request content that's illegal, infringes on someone else's rights, or is intended to cause harm. We reserve the right to reject or block requests that clearly violate this.</p>
+
+      <h3>No quality or fitness guarantee</h3>
+      <p>Every generated model goes through an automated printability check (wall thickness, manifold geometry, envelope size), but we make no guarantee that a given model is structurally sound, dimensionally accurate, or fit for any particular purpose — especially anything load-bearing, safety-related, or intended for use with food, children, or medical applications. Inspect and test-print at your own risk.</p>
+
+      <h3>Your Kaggle token</h3>
+      <p>If you paste a token without an account, it's used only in memory for that one request and never written to disk or logged. If you create an account and explicitly choose to save a token, it's encrypted at rest and never displayed in plain text again. See the <a href="/privacy">Privacy Policy</a> for details.</p>
+
+      <h3>Third-party services</h3>
+      <p>Generation runs on Kaggle's infrastructure, using your own Kaggle account and subject to Kaggle's own terms of service. PrintForge isn't affiliated with or endorsed by Kaggle.</p>
+
+      <h3>No uptime or availability promise</h3>
+      <p>This is a personal project running on free-tier hosting. It may be slow, unavailable, or discontinued without notice.</p>
+
+      <h3>Changes</h3>
+      <p>These terms may change as the project evolves. Continued use after a change means you accept the updated terms.</p>
+    </div>
+  </section>
+</main>
+<footer>
+  <div class="container">
+    <div>
+      <a href="/faq">FAQ</a>
+      <a href="/feedback">Feedback</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </div>
+    <div>© PrintForge. Personal project, no affiliation with Kaggle.</div>
+  </div>
+</footer>
+
+
+<script src="/assets/app.js"></script>
+<script>initAuthNav("auth-nav-slot");</script>
+</body>
+</html>

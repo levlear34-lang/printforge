@@ -3,3 +3,6 @@ Allow: /
 Disallow: /api/
 Disallow: /job
 Disallow: /result
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /thank-you

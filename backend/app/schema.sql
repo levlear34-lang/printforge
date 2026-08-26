@@ -27,3 +27,13 @@ CREATE TABLE IF NOT EXISTS job_history (
 );
 
 CREATE INDEX IF NOT EXISTS job_history_user_id_idx ON job_history (user_id);
+
+-- Feedback form submissions (rating + free text). Anonymous by design --
+-- no user_id column -- since the feedback page doesn't require login.
+-- Readable only via the admin view (routes/admin.py), gated by ADMIN_TOKEN.
+CREATE TABLE IF NOT EXISTS feedback (
+    id SERIAL PRIMARY KEY,
+    rating INTEGER,
+    message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

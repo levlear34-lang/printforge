@@ -15,6 +15,7 @@ class Settings:
         self.database_url = os.environ.get("DATABASE_URL")
         self.session_secret = os.environ.get("SESSION_SECRET")
         self.token_encryption_key = os.environ.get("TOKEN_ENCRYPTION_KEY")
+        self.admin_token = os.environ.get("ADMIN_TOKEN")
 
 
 settings = Settings()

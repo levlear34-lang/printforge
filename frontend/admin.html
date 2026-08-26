@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — PrintForge</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.feedback-row {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.feedback-row .stars { color: var(--accent); }
+.feedback-row .meta { color: var(--text-muted); font-size: 0.8rem; margin-top: 6px; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links"></div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container">
+      <h2>Feedback (admin)</h2>
+
+      <div class="form-card" id="token-form" style="margin-bottom:24px">
+        <div class="field">
+          <label for="admin-token">Admin token</label>
+          <input type="password" id="admin-token" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" id="load-btn">Load feedback</button>
+        <div id="banner-slot"></div>
+      </div>
+
+      <div id="feedback-list"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/assets/app.js"></script>
+<script>
+const bannerSlot = document.getElementById("banner-slot");
+const listEl = document.getElementById("feedback-list");
+
+document.getElementById("load-btn").addEventListener("click", async () => {
+  bannerSlot.innerHTML = "";
+  const token = document.getElementById("admin-token").value.trim();
+  try {
+    const response = await fetch("/api/admin/feedback", { headers: { "x-admin-token": token } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to load.");
+    renderFeedback(data);
+  } catch (e) {
+    bannerSlot.innerHTML = `<div class="banner banner-error">${e.message}</div>`;
+  }
+});
+
+function renderFeedback(items) {
+  if (items.length === 0) {
+    listEl.innerHTML = `<p style="color:var(--text-muted)">No feedback yet.</p>`;
+    return;
+  }
+  listEl.innerHTML = items.map((item) => `
+    <div class="feedback-row">
+      <div class="stars">${item.rating ? "★".repeat(item.rating) + "☆".repeat(5 - item.rating) : "(no rating)"}</div>
+      <p>${escapeHtml(item.message || "")}</p>
+      <div class="meta">${new Date(item.created_at).toLocaleString()}</div>
+    </div>
+  `).join("");
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

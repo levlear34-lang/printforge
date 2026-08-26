@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAQ — PrintForge</title>
+<meta name="description" content="Common questions about PrintForge: Kaggle tokens, quality tiers, pricing, and what you can print.">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.faq-item { margin-bottom: 28px; }
+.faq-item h3 { font-size: 1.1rem; margin: 0 0 8px; }
+.faq-item p { color: var(--text-muted); margin: 0; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a class="nav-logo" href="/">Print<span>Forge</span></a>
+    <div class="nav-links"><span id="auth-nav-slot"></span></div>
+  </div>
+</nav>
+
+<main>
+  <section class="section">
+    <div class="container" style="max-width:720px">
+      <h2>Frequently asked questions</h2>
+
+      <div class="faq-item">
+        <h3>What's a Kaggle token?</h3>
+        <p>Kaggle is a free data-science platform that gives everyone a weekly allowance of free GPU time. PrintForge uses your own Kaggle account's GPU quota to actually generate your model — that's how this stays free for you and for us. A "token" is a short piece of text from your Kaggle account settings that lets PrintForge submit a job on your behalf, without ever seeing your Kaggle password. Create a free account at kaggle.com, then go to Settings → API → "Create New Token" to get one.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Why does "refined" take longer than "fast"?</h3>
+        <p>For themed/creative requests, the fast tier runs one generative model. The refined tier chains two models together (an image-generation step feeding into a 3D-reconstruction step) for noticeably higher detail — which means more compute time and a bigger bite out of your weekly Kaggle GPU quota per generation. Parametric requests (with explicit measurements) don't use either tier — they're generated deterministically and don't need this tradeoff.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Is my Kaggle token stored?</h3>
+        <p>Not unless you create an account and explicitly choose to save it. If you use PrintForge anonymously (or don't save a token), it's used only in memory for that one request and is never written to disk or logged. If you do save one, it's encrypted at rest and never displayed in plain text again — you can delete it from your dashboard at any time.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>What can I print this on?</h3>
+        <p>Any FDM (filament) or resin 3D printer that can open a standard STL file, via your usual slicer (OrcaSlicer, Cura, Bambu Studio, PrusaSlicer, etc.). Every model is automatically checked for common printability issues — wall thickness and manifold (watertight) geometry — before it's handed back to you, but we can't guarantee it fits your specific printer's build volume or filament, so check the reported size against your printer.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Is this free?</h3>
+        <p>Yes. PrintForge itself doesn't charge anything. Generation runs on Kaggle's free GPU tier using your own account, which gives everyone about 30 hours of GPU time per week at no cost.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>How long do my files stick around?</h3>
+        <p>Generated files expire automatically after 7 days (or immediately if you delete the entry from your dashboard). Download what you want to keep.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Do creative/themed requests work yet?</h3>
+        <p>Parametric requests (with measurements — dimensions, slot counts, angles) work fully today. Creative/themed requests (like "Batman phone holder") are still being finished — you'll see the fast/refined tier choice in the create form, but generation for that path isn't live yet. We'll update this page once it is.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>
+  <div class="container">
+    <div>
+      <a href="/faq">FAQ</a>
+      <a href="/feedback">Feedback</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+    </div>
+    <div>© PrintForge. Personal project, no affiliation with Kaggle.</div>
+  </div>
+</footer>
+
+
+<script src="/assets/app.js"></script>
+<script>initAuthNav("auth-nav-slot");</script>
+</body>
+</html>
