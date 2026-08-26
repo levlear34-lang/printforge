@@ -48,6 +48,8 @@ def save_kaggle_token(user_id, token):
         username = kaggle_client.resolve_username(token)
     except kaggle_client.KaggleAuthError as exc:
         raise auth.AuthError(str(exc), status_code=401) from exc
+    except kaggle_client.KaggleCliError as exc:
+        raise auth.AuthError(f"Couldn't reach Kaggle to verify this token: {exc}", status_code=502) from exc
     encrypted = token_crypto.encrypt_token(token)
     db.save_kaggle_token(user_id, encrypted, username)
     return username

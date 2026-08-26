@@ -97,6 +97,17 @@ def test_save_kaggle_token_rejects_bad_token():
     assert exc_info.value.status_code == 401
 
 
+def test_save_kaggle_token_reports_cli_failure_cleanly():
+    """Regression guard for the real Render incident: a KaggleCliError
+    (subprocess-level failure, not a rejected token) must surface as a
+    clean error, not an unhandled 500.
+    """
+    with patch.object(kaggle_client, "resolve_username", side_effect=kaggle_client.KaggleCliError("boom")):
+        with pytest.raises(auth.AuthError) as exc_info:
+            accounts.save_kaggle_token(1, "some-token")
+    assert exc_info.value.status_code == 502
+
+
 def test_get_saved_token_plaintext_decrypts():
     encrypted = token_crypto.encrypt_token("the-real-token")
     with patch.object(db, "get_user_by_id", return_value=_fake_user(encrypted_token=encrypted)):

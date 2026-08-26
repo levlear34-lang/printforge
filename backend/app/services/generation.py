@@ -55,6 +55,8 @@ def submit_request(text, token=None, tier=None, ip=None, user_id=None):
         username = kaggle_client.resolve_username(token)
     except kaggle_client.KaggleAuthError as exc:
         raise GenerationError(str(exc), status_code=401) from exc
+    except kaggle_client.KaggleCliError as exc:
+        raise GenerationError(f"Couldn't reach Kaggle to verify this token: {exc}", status_code=502) from exc
 
     if classification == "creative":
         tier_key = tier

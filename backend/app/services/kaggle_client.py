@@ -25,6 +25,7 @@ CLI version actually checks.
 import json
 import os
 import subprocess
+import sys
 
 
 class KaggleAuthError(Exception):
@@ -41,13 +42,30 @@ def _run_with_token(token, args, timeout=120):
     env["KAGGLE_API_TOKEN"] = token.strip()
     env["PYTHONUTF8"] = "1"
 
-    return subprocess.run(
-        ["python", "-m", "kaggle"] + args,
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=timeout,
-    )
+    try:
+        return subprocess.run(
+            # sys.executable, not the literal string "python" -- found via
+            # a real 500 on Render's live deploy (bare, unhandled
+            # FileNotFoundError, not one of this module's own exception
+            # types): Render's container only has `python3` on PATH, not
+            # `python`, so the hardcoded command silently didn't exist
+            # there. sys.executable is the absolute path to the exact
+            # interpreter already running this process, correct
+            # regardless of what aliases a given deployment environment
+            # does or doesn't set up.
+            [sys.executable, "-m", "kaggle"] + args,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        # Belt-and-suspenders alongside the sys.executable fix above: any
+        # future failure to even launch the subprocess (missing
+        # interpreter, timeout, etc.) surfaces as a clean KaggleCliError
+        # instead of a bare unhandled exception -- exactly the class of
+        # bug that caused the raw 500 this comment is explaining.
+        raise KaggleCliError(f"Failed to run the kaggle CLI: {exc}") from exc
 
 
 def resolve_username(token):
