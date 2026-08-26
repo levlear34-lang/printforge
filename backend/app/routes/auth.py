@@ -51,9 +51,9 @@ def require_user_id(request: Request) -> int:
 def signup(payload: SignupRequest, response: Response):
     try:
         user = accounts.signup(payload.email, payload.password)
+        _set_session_cookie(response, user["id"])
     except auth.AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    _set_session_cookie(response, user["id"])
     return accounts.public_user_view(user)
 
 
@@ -61,9 +61,9 @@ def signup(payload: SignupRequest, response: Response):
 def login(payload: LoginRequest, response: Response):
     try:
         user = accounts.login(payload.email, payload.password)
+        _set_session_cookie(response, user["id"])
     except auth.AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    _set_session_cookie(response, user["id"])
     return accounts.public_user_view(user)
 
 
