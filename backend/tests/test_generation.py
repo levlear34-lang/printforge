@@ -48,10 +48,27 @@ def test_submit_request_creative_without_tier_asks_for_one():
     assert exc_info.value.status_code == 422
 
 
-def test_submit_request_creative_with_tier_is_not_yet_supported():
-    with pytest.raises(generation.GenerationError) as exc_info:
-        generation.submit_request("Batman themed phone holder", "fake-token", tier="fast")
-    assert exc_info.value.status_code == 501
+def test_submit_request_creative_pushes_correct_tier_kernel():
+    with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-xyz") as mock_push:
+        job_id = generation.submit_request("Batman themed phone holder", "fake-token", tier="fast")
+
+    job = jobs.get_job(job_id)
+    assert job["status"] == "running"
+    assert job["classification"] == "creative"
+    assert job["tier"] == "fast"
+    assert job["spec"] is None
+    mock_push.assert_called_once()
+    # fast/refined tiers request a T4 explicitly (see kernel_builder.TIERS)
+    assert mock_push.call_args.kwargs["accelerator"] == "NvidiaTeslaT4"
+
+
+def test_submit_request_refined_tier_also_wired():
+    with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-xyz"):
+        job_id = generation.submit_request("Batman themed phone holder", "fake-token", tier="refined")
+
+    assert jobs.get_job(job_id)["tier"] == "refined"
 
 
 def test_submit_request_parametric_pushes_kernel_and_creates_job(tmp_path):
@@ -130,6 +147,29 @@ def test_check_job_marks_quality_failed_when_report_says_so(tmp_path, monkeypatc
         view = generation.check_job(job_id)
 
     assert view["status"] == "quality_failed"
+
+
+def test_check_job_marks_quality_failed_when_no_stl_but_report_exists(tmp_path, monkeypatch):
+    """Creative-tier kernels write only report.json (no model.stl) when the
+    raw generated mesh fails the pre-Blender sanity check -- a normal
+    outcome for some prompts, not a pipeline error.
+    """
+    job_id = jobs.create_job("a vague prompt", "creative", "fast", "tok", "user", "user/kernel")
+    jobs.update_job(job_id, status="running", last_checked_at=0.0)
+
+    dest_dir = os.path.join(str(tmp_path), job_id)
+    os.makedirs(dest_dir, exist_ok=True)
+    with open(os.path.join(dest_dir, "report.json"), "w") as f:
+        json.dump({"passed": False, "reasons": ["too small (largest dimension 0.1)"]}, f)
+
+    monkeypatch.setattr(generation, "GENERATED_ROOT", str(tmp_path))
+
+    with patch.object(kaggle_client, "get_status", return_value="COMPLETE"), \
+         patch.object(kaggle_client, "retrieve_output", return_value=[]):
+        view = generation.check_job(job_id)
+
+    assert view["status"] == "quality_failed"
+    assert "too small" in view["error"]
 
 
 def test_check_job_marks_error_on_kaggle_failure_status():

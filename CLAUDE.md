@@ -68,6 +68,15 @@ branding throughout.
 - `kaggle_kernel/printforge_parametric/` — the parametric-tier generation
   kernel (template; job-specific copies are built at request time, never
   committed)
+- `kaggle_kernel/printforge_creative_fast/` (Shap-E) and
+  `printforge_creative_refined/` (Stable Diffusion -> TripoSR) — the two
+  creative-tier kernels: ML generation, a raw-mesh sanity check, then the
+  same downloaded-portable-Blender print-readiness stage the parametric
+  kernel uses (auto-scale, repair via Voxel Remesh, base-add, export).
+  Print-readiness code is intentionally duplicated between the two
+  (verbatim identical) rather than shared -- Kaggle "script" kernels are
+  single self-contained files, the same constraint the parametric kernel
+  already has. Keep both in sync if that logic changes.
 - `backend/app/db.py` + `backend/app/schema.sql` — Postgres access layer
   (plain psycopg SQL, no ORM) and the 2-table schema (`users`,
   `job_history`). Every function here is mocked in tests, never hit for
@@ -158,12 +167,15 @@ confirmed fine) -- see "Known blockers".
 
 ## Current milestone: 7 — Analytics, cookie consent, final polish
 Google Analytics + cookie consent (done), sticky mobile CTA (already done
-in Milestone 3), final polish pass (done). The remaining "full manual
-smoke test of the entire flow end to end... both fast and refined tiers"
-is genuinely blocked, not just untested -- creative-tier generation was
-deferred back in Milestone 2 and never built, so there is no fast/refined
-flow to smoke-test yet. See Progress Log and the note at the end of this
-section.
+in Milestone 3), final polish pass (done). Creative-tier (fast/refined)
+generation -- deferred since Milestone 2 -- is now built and verified for
+real on live Kaggle infrastructure (both tiers, including the base-added/
+material-fixed path). Full manual smoke test of the complete flow
+end-to-end (anonymous + logged-in, fast + refined) is done for everything
+except the logged-in path, which is still waiting on the developer's
+Render `SESSION_SECRET`/`TOKEN_ENCRYPTION_KEY` env vars to actually take
+effect (see "Known blockers"). Project is functionally complete pending
+that one external confirmation.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -877,3 +889,119 @@ what's next.)
   Next: pending the developer's answer on creative-tier scope, plus
   confirming the Render env vars actually took effect (delete the
   developer's requested test-account cleanup once login works).
+
+- 2026-08-26: Creative-tier (fast/refined) generation -- built, and
+  verified for real against live Kaggle infrastructure, both tiers,
+  including two real bugs found only by actually running it (not
+  something mocked tests could have caught). Developer's explicit call:
+  build this now rather than ship parametric-only, given it was the one
+  thing blocking a genuine end-to-end smoke test.
+
+  Ported (not copied) from AI_3D_FACTORY: the Shap-E generation script
+  (`kaggle_kernel/shape_generator/generate_mesh.py`, verbatim -- same
+  --no-deps install workaround), the SD->TripoSR generation script
+  (`kaggle_kernel/sd_triposr_generator/generate_mesh_refined.py`,
+  verbatim -- same transformers-pin workaround, same model choices), the
+  raw-mesh sanity check (`app/modules/mesh_quality.py`, verbatim, inlined
+  into each kernel since it's pure Python with no dependencies), and the
+  print-readiness stage (`app/controllers/blender/process_creative_mesh.py`)
+  -- this last one needed real rework, not just a port, described below.
+  `kernel_builder.TIERS` gained `fast`/`refined` entries (both requesting
+  `--accelerator NvidiaTeslaT4`, the same real fix AI_3D_FACTORY's own
+  kernels needed for the same P100-incompatibility reason), and
+  `build_kernel()` now injects a raw prompt (not a computed spec) for
+  these two tiers, using a regex + replacement *function* for the
+  substitution -- deliberately avoiding re.sub's string-replacement form,
+  which has a documented history of mangling backslashes in this exact
+  codebase (AI_3D_FACTORY's `kaggle_generator.write_prompt` bug); a
+  regression test locks this in
+  (`test_kernel_builder.py::test_build_kernel_prompt_injection_handles_quotes_and_backslashes`).
+  `generation.submit_request`'s 501 "not wired up yet" block is gone;
+  creative jobs now push the right tier's kernel with no design spec.
+  `_retrieve_and_finalize` gained a real new case: creative-tier kernels
+  write *only* `report.json` (no `model.stl`) when the raw mesh fails its
+  sanity check -- a normal, expected outcome for some prompts, now
+  surfaced as `quality_failed` with the actual reasons, not a generic
+  "no model.stl produced" error.
+
+  THE REAL PRINT-READINESS REWORK. AI_3D_FACTORY's `process_creative_mesh.py`
+  repairs non-manifold geometry via the bundled `object_print3d_utils`
+  Blender addon, enabled with `addon_utils.enable(...)`. A real refined-
+  tier Kaggle run (SD->TripoSR generation itself worked correctly --
+  75k vertices, passed the raw-mesh quality check) failed at the print-
+  readiness stage with `Add-on not loaded: "object_print3d_utils",
+  cause: No module named 'object_print3d_utils'`. Researched rather than
+  guessed at a workaround: that addon has been migrated to Blender's
+  newer opt-in Extensions system and simply isn't bundled in the portable
+  Linux 5.2.1 build Kaggle downloads, even though it's still present in
+  the local Windows 5.2.0 LTS install AI_3D_FACTORY's original code was
+  written against -- the third distinct case in this project of the two
+  Blender builds silently diverging (after the STL-export-operator and
+  EEVEE-vs-CYCLES issues in earlier milestones).
+  Replaced the addon-based repair with Blender's built-in Voxel Remesh
+  modifier (no addon needed, reliably produces closed/solid geometry
+  regardless of input mess) -- and set its voxel_size to the same
+  min-wall-thickness value the old Solidify-modifier step used, which
+  turns out to also enforce a comparable minimum feature size as a side
+  effect, making the separate Solidify step redundant. Both removed;
+  Voxel Remesh alone now does repair AND minimum-feature-size enforcement.
+  Verified this whole redesign *locally* before spending any more real
+  Kaggle GPU time on it: built a deliberately messy synthetic test mesh
+  (a UV sphere with ~5% of faces deleted, via a real Blender script, not
+  hand-authored) and ran the exact print-readiness functions against it.
+  Hit a second real, non-obvious Blender bug in that local testing:
+  calling `bpy.ops.object.transform_apply(location=True, ...)` on a
+  non-manifold mesh, immediately before adding+applying a brand-new
+  modifier, makes that modifier_apply call silently no-op -- returns
+  `{'FINISHED'}`, raises nothing, but the mesh is byte-for-byte unchanged.
+  Reproduced it deliberately (clean mesh through the same pipeline: works
+  fine; messy mesh: no-ops every time) before trusting the diagnosis, then
+  fixed it by reordering -- Voxel Remesh now runs immediately after
+  `auto_scale` (which only bakes *scale*, unaffected), and `sit_on_bed`
+  (which bakes *location*) now runs after remeshing instead of before.
+  Verified the reordered pipeline handles the boolean-union base-add step
+  correctly too (still 0 non-manifold edges) before trusting it enough to
+  spend real Kaggle quota confirming it.
+
+  A THIRD real bug, found only once real Kaggle runs actually succeeded
+  end-to-end: both tiers produced correct, valid, watertight geometry but
+  a nearly-unreadable near-black preview render. Root cause: the original
+  `apply_vertex_color_material` reads the mesh's imported per-vertex color
+  attribute into a shader's Base Color via an Attribute node -- but Voxel
+  Remesh replaces the mesh topology entirely and does not transfer that
+  attribute, while the *material slot* (attached to the object, not the
+  mesh data) survives remeshing untouched. The shader kept trying to read
+  a now-nonexistent attribute, which evaluates to black. Fixed by
+  dropping the vertex-color approach entirely (it can't survive
+  remeshing regardless of when it's applied) in favor of a plain, fixed
+  neutral-gray material (`apply_flat_material`) applied *after*
+  remeshing. Verified in complete isolation first (a Suzanne monkey mesh
+  through just the extracted material+render functions, confirmed
+  clearly visible and correctly lit) before spending a third real Kaggle
+  run confirming it end-to-end.
+
+  Real, unmocked Kaggle verification (4 successful full round-trips plus
+  2 informative real failures that directly drove the fixes above, ~0.45
+  GPU-hours total for this whole creative-tier effort, 28.18h/30h still
+  remaining for the week): fast tier ("a small dragon figurine") and
+  refined tier ("a ceramic coffee mug") both completed with
+  `non_manifold_edges: 0`, `passed: true`, and a genuinely legible,
+  correctly-lit, correctly-based preview image showing recognizable
+  geometry matching the prompt. Confirmed via the actual
+  `generation.submit_request`/`check_job` service functions the real API
+  layer calls, not a bypass script.
+
+  `faq.html` updated: removed the now-obsolete "creative requests aren't
+  live yet" caveat, replaced with a real question about what the
+  automatic quality checks catch.
+
+  91/97 -> 97/97 tests still passing throughout (existing tests updated
+  where they asserted the old 501-not-supported behavior; new coverage
+  added for tier-based kernel selection, accelerator selection, and the
+  no-STL/quality_failed retrieval path).
+
+  Next: Milestone 7's Google Analytics/cookie-consent work (already done,
+  see the entry above) plus this creative-tier work together close out
+  everything in the original 7-milestone plan except the still-pending
+  Render `SESSION_SECRET`/`TOKEN_ENCRYPTION_KEY` confirmation and the
+  associated logged-in-tier smoke test.

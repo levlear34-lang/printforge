@@ -44,19 +44,11 @@ def submit_request(text, token=None, tier=None, ip=None, user_id=None):
 
     classification = classify_request(text)
 
-    if classification == "creative":
-        if tier not in ("fast", "refined"):
-            raise GenerationError(
-                "This looks like a creative/themed request -- pick a quality "
-                "tier (fast or refined) before submitting.",
-                status_code=422,
-            )
+    if classification == "creative" and tier not in ("fast", "refined"):
         raise GenerationError(
-            "Creative (Shap-E / Stable Diffusion->TripoSR) generation isn't "
-            "wired up yet -- only parametric requests (with explicit "
-            "measurements) are supported so far. Try adding dimensions, a "
-            "slot count, or an angle.",
-            status_code=501,
+            "This looks like a creative/themed request -- pick a quality "
+            "tier (fast or refined) before submitting.",
+            status_code=422,
         )
 
     try:
@@ -64,13 +56,20 @@ def submit_request(text, token=None, tier=None, ip=None, user_id=None):
     except kaggle_client.KaggleAuthError as exc:
         raise GenerationError(str(exc), status_code=401) from exc
 
-    parsed = parse_request(text)
-    spec = design_alternatives(parsed)[0]  # top-scored alternative, auto-selected
+    if classification == "creative":
+        tier_key = tier
+        spec = None
+        kernel_kwargs = {"prompt": text}
+    else:
+        tier_key = "parametric"
+        parsed = parse_request(text)
+        spec = design_alternatives(parsed)[0]  # top-scored alternative, auto-selected
+        kernel_kwargs = {"spec": spec}
 
     job_id = jobs.create_job(
         prompt=text,
         classification=classification,
-        tier=None,
+        tier=tier if classification == "creative" else None,
         token=token,
         kaggle_username=username,
         kernel_id=None,
@@ -80,9 +79,10 @@ def submit_request(text, token=None, tier=None, ip=None, user_id=None):
     if user_id is not None:
         accounts.record_job_start(job_id, user_id, text, classification)
 
-    kernel_dir, kernel_id = kernel_builder.build_kernel("parametric", job_id, username, spec=spec)
+    kernel_dir, kernel_id = kernel_builder.build_kernel(tier_key, job_id, username, **kernel_kwargs)
+    accelerator = kernel_builder.TIERS[tier_key]["accelerator"]
     try:
-        kernel_id = kaggle_client.push_kernel(token, kernel_dir)
+        kernel_id = kaggle_client.push_kernel(token, kernel_dir, accelerator=accelerator)
     except kaggle_client.KaggleCliError as exc:
         jobs.update_job(job_id, status="error", error=str(exc))
         if user_id is not None:
@@ -147,6 +147,23 @@ def _retrieve_and_finalize(job_id, job):
     report_path = os.path.join(dest_dir, "report.json")
 
     if not os.path.exists(stl_path):
+        # Creative-tier kernels write only report.json (no model.stl) when
+        # the raw generated mesh fails the pre-Blender sanity check (too
+        # little geometry, degenerate volume, wildly mis-scaled) -- a
+        # normal, expected outcome for some prompts, not a pipeline error.
+        if os.path.exists(report_path):
+            with open(report_path, encoding="utf-8") as f:
+                report = json.load(f)
+            reasons = ", ".join(report.get("reasons", [])) or "failed the raw mesh quality check"
+            jobs.update_job(
+                job_id,
+                status="quality_failed",
+                error=f"The generated mesh {reasons}. Try a different or more specific prompt.",
+            )
+            if user_id is not None:
+                accounts.record_job_update(job_id, status="quality_failed")
+            return
+
         jobs.update_job(
             job_id,
             status="error",

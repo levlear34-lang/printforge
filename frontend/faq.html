@@ -56,8 +56,8 @@
       </div>
 
       <div class="faq-item">
-        <h3>Do creative/themed requests work yet?</h3>
-        <p>Parametric requests (with measurements — dimensions, slot counts, angles) work fully today. Creative/themed requests (like "Batman phone holder") are still being finished — you'll see the fast/refined tier choice in the create form, but generation for that path isn't live yet. We'll update this page once it is.</p>
+        <h3>What does the automatic quality check actually catch?</h3>
+        <p>Two layers: right after generation, the raw mesh is checked for obviously broken output (too little geometry, a degenerate/near-zero-volume shape, or a wildly mis-scaled result) before any further processing. Then, after the model is scaled, based, and repaired, it's checked again for manifold (watertight) geometry and correct sizing. If either check fails, you'll get a clear message instead of a broken file — try rephrasing or adding more detail to the prompt.</p>
       </div>
     </div>
   </section>
