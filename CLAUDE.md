@@ -197,16 +197,17 @@ final polish pass, and creative-tier (fast/refined) generation (deferred
 since Milestone 2, built and verified live this milestone). See Progress
 Log for the full story on each.
 
-## Current milestone: Milestone 8 — design pass + AI-refined-prompt feature
-Two ordered pieces of work, per direct instruction: (1) a visual/UX design
-pass using newly-installed design-skill tooling, verified against a local
-dev server (done, see Progress Log); (2) an opt-in "Advanced" prompt-
-refinement step for creative requests -- a small separate Kaggle kernel
-expands a vague idea into a detailed, generation-ready prompt before the
-visitor spends GPU-hour quota on the fast/refined 3D tiers, with
-unlimited user-driven iteration rounds. See "Milestone 8 — AI-refined-
-prompt feature" below for the full spec. In progress -- see Progress Log
-for what's done.
+## Current milestone: none — Milestone 8 complete
+Both ordered pieces of work are done: (1) a visual/UX design pass using
+newly-installed design-skill tooling, verified against a local dev
+server; (2) the opt-in "Advanced" prompt-refinement step for creative
+requests, verified end to end on the live site with real Kaggle calls
+(two refinement rounds with feedback, approval, and a real fast-tier
+generation all the way to a downloadable STL), plus a live regression
+check that Quick mode is unaffected. See "Milestone 8 — AI-refined-prompt
+feature" below for the full spec and the Progress Log for what was
+actually built and verified. Nothing further is planned without
+additional direction.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -1377,6 +1378,46 @@ what's next.)
   picked up the new markup. Noted here in case a future session hits the
   same thing.
 
-  Next: Milestone 5, FAQ update (GPU-hour impact of the Advanced path)
-  and a full manual smoke test covering both Quick and Advanced end to
-  end on the live site.
+  Milestone 5 (FAQ + full live smoke test) -- done. This closes out
+  Milestone 8 and the entire two-part task for this session.
+
+  FAQ: added a "What's the 'Advanced: AI-refined prompt' option?" entry
+  explaining what it does, when it's worth the tradeoff over Quick mode,
+  and its per-round time/GPU-hour cost -- committed and pushed on its own
+  (frontend/faq.html only).
+
+  Full live smoke test -- both paths, real Kaggle calls, against the
+  actual deployed site (not local dev, not mocked), same rigor the
+  project's other milestones have held to:
+
+  Advanced path, real and complete end to end: submitted round 1
+  ("batman phone holder") against the live site, polled to completion
+  (a genuine 596-character refined prompt); fed that back in as round 2
+  with feedback "make it more armored, with a bat-shaped silhouette" --
+  the model correctly wove in "heavily armored," "Batmobile"-inspired
+  styling, and reinforced plating while keeping the rest of the prompt
+  consistent; approved that result and submitted it to the real
+  fast-tier generation kernel via the *unchanged* /api/create endpoint;
+  polled to completion; fetched both the resulting preview.png (297KB)
+  and model.stl (580KB) from the live site and confirmed both actually
+  downloaded (200, correct content-types) rather than just checking the
+  job status flipped to "complete."
+
+  Quick path regression check, also real and live: submitted "a viking
+  helmet" as a plain creative request with no refinement involved,
+  through the same /api/create endpoint, and confirmed it still
+  completed normally -- direct evidence (not just code review) that nothing
+  in this milestone's create.html changes broke the pre-existing flow.
+
+  Kaggle quota accounted for precisely, not estimated: 2.16h/30h used
+  after this test (up from 1.98h before it started), meaning the two
+  live 3D-generation runs (Advanced's final gen + the Quick regression
+  check) cost 0.18h combined -- and the *two refinement rounds in
+  between cost nothing*, reconfirming under real production conditions
+  (not just the earlier isolated kernel test) that the CPU-only design
+  choice for the refiner achieves its actual purpose.
+
+  This completes Milestone 8 in full: both the design/visual polish pass
+  and the AI-refined-prompt feature (all 5 of its sub-milestones) are
+  done, tested, and verified live. Nothing further is planned without
+  additional direction.
