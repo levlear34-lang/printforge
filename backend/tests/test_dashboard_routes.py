@@ -5,6 +5,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app import db
+from app.config import settings
 from app.main import app
 from app.services import auth, kaggle_client
 
@@ -70,6 +71,18 @@ def test_save_token_success():
     assert response.status_code == 200
     assert response.json()["saved_kaggle_username"] == "realuser"
     mock_save.assert_called_once()
+
+
+def test_save_token_with_malformed_encryption_key_returns_clean_503():
+    """Regression guard for a real production incident: a malformed
+    TOKEN_ENCRYPTION_KEY used to crash this endpoint with a raw,
+    unhandled 500 instead of a clean error.
+    """
+    c = _logged_in_client()
+    with patch.object(kaggle_client, "resolve_username", return_value="realuser"), \
+         patch.object(settings, "token_encryption_key", "not-a-real-fernet-key"):
+        response = c.post("/api/account/token", json={"kaggle_token": "a-real-token"})
+    assert response.status_code == 503
 
 
 def test_save_token_bad_token_401():

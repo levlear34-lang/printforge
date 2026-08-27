@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from app import db
 from app.config import settings
+from app.services import token_crypto
 from app.vendored.request_classifier import classify_request
 from app.routes.create import router as create_router
 from app.routes.auth import router as auth_router
@@ -150,6 +151,18 @@ def robots():
 
 @app.exception_handler(db.DatabaseNotConfiguredError)
 async def database_not_configured(request: Request, exc: db.DatabaseNotConfiguredError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(token_crypto.EncryptionNotConfiguredError)
+async def encryption_not_configured(request: Request, exc: token_crypto.EncryptionNotConfiguredError):
+    # Same pattern as database_not_configured -- found necessary via a
+    # real live 500 (bare, no message) when TOKEN_ENCRYPTION_KEY was set
+    # to a value Fernet's own constructor rejected. This is the ONLY
+    # place that error was handled at all; save_kaggle_token/
+    # get_saved_token_plaintext call token_crypto directly with no local
+    # try/except, so without this handler it propagated as an unhandled
+    # exception from any route that touches saved tokens.
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 

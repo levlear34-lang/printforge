@@ -20,7 +20,21 @@ def _fernet():
             "TOKEN_ENCRYPTION_KEY is not set. Saved-token features are "
             "disabled until it's configured."
         )
-    return Fernet(settings.token_encryption_key)
+    try:
+        return Fernet(settings.token_encryption_key)
+    except ValueError as exc:
+        # Fernet's own constructor validates the key format (32 url-safe
+        # base64-encoded bytes) and raises ValueError for anything else --
+        # e.g. a plain random string pasted in by mistake instead of a
+        # real Fernet key. Previously unhandled here, surfacing as a raw
+        # 500 with no useful message; found via a real deploy where
+        # TOKEN_ENCRYPTION_KEY had been set to something not in that
+        # format.
+        raise EncryptionNotConfiguredError(
+            "TOKEN_ENCRYPTION_KEY is set but isn't a valid Fernet key. "
+            "Generate one with: python -c \"from cryptography.fernet "
+            "import Fernet; print(Fernet.generate_key().decode())\""
+        ) from exc
 
 
 def encrypt_token(token):
