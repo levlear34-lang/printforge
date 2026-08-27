@@ -340,6 +340,9 @@ textarea, input[type="text"], input[type="password"], select {
   font-family: inherit;
 }
 textarea { min-height: 96px; resize: vertical; }
+textarea, input[type="text"], input[type="password"], select {
+  transition: border-color 150ms var(--ease-out);
+}
 textarea:focus, input:focus, select:focus {
   outline: none;
   border-color: var(--accent);
@@ -383,12 +386,28 @@ details.onboarding ol { margin: 10px 0 0; padding-left: 20px; }
   padding: 12px 14px;
   font-size: 0.9rem;
   margin-bottom: 16px;
+  animation: banner-in 250ms var(--ease-out);
 }
 .banner-error { background: rgba(248, 113, 113, 0.1); border: 1px solid var(--error); color: #fca5a5; }
 .banner-warn { background: rgba(251, 191, 36, 0.1); border: 1px solid var(--warn); color: #fcd34d; }
 .banner-info { background: rgba(160, 166, 184, 0.1); border: 1px solid var(--border); color: var(--text-muted); }
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .banner { animation: none; }
+}
 
 /* --- Job status / result --- */
+.status-card,
+.result-preview {
+  animation: banner-in 300ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-card, .result-preview { animation: none; }
+}
+
 .status-card {
   max-width: 560px;
   margin: 0 auto;
