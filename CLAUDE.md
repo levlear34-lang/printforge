@@ -197,10 +197,16 @@ final polish pass, and creative-tier (fast/refined) generation (deferred
 since Milestone 2, built and verified live this milestone). See Progress
 Log for the full story on each.
 
-## Current milestone: none — all 7 milestones complete
-Nothing further is planned without additional direction. The only open
-item is `ADMIN_TOKEN` not yet being set on Render (admin feedback view
-only, nothing visitor-facing) -- see "Known blockers".
+## Current milestone: Milestone 8 — design pass + AI-refined-prompt feature
+Two ordered pieces of work, per direct instruction: (1) a visual/UX design
+pass using newly-installed design-skill tooling, verified against a local
+dev server (done, see Progress Log); (2) an opt-in "Advanced" prompt-
+refinement step for creative requests -- a small separate Kaggle kernel
+expands a vague idea into a detailed, generation-ready prompt before the
+visitor spends GPU-hour quota on the fast/refined 3D tiers, with
+unlimited user-driven iteration rounds. See "Milestone 8 — AI-refined-
+prompt feature" below for the full spec. In progress -- see Progress Log
+for what's done.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -219,6 +225,54 @@ only, nothing visitor-facing) -- see "Known blockers".
 7. Google Analytics + cookie consent, sticky mobile CTA, final polish pass,
    full manual smoke test of the entire flow (anonymous + logged-in, fast +
    refined tiers).
+
+## Milestone 8 — AI-refined-prompt feature
+### Goal
+Vague creative prompts ("batman phone holder") sometimes produce
+degenerate/low-quality meshes because the fast/refined 3D kernels get no
+detail to work with. Add an opt-in pre-processing step: a small, separate
+Kaggle kernel expands a vague idea into a detailed, generation-ready
+prompt (shape/pose/style/proportions/print-quality details) before any
+GPU-hour quota is spent on actual 3D generation.
+
+### Design
+- Second, opt-in path alongside the existing direct-to-generation flow on
+  /create -- labeled "Quick" (current behavior, default) vs "Advanced:
+  AI-refined prompt" (slower, uses a separate CPU-only Kaggle job per
+  round before 3D generation even starts).
+- New kernel (`kaggle_kernel/printforge_prompt_refiner/`): Qwen2.5-1.5B-
+  Instruct, CPU-only (`enable_gpu: false`, matching the parametric
+  tier's precedent) -- text expansion doesn't need a GPU, and running it
+  without one means unlimited refinement rounds never touch the same
+  weekly GPU-hour quota the fast/refined 3D tiers depend on. Confirmed
+  with `kaggle quota` after two real test runs: 0.00h GPU consumed by
+  either round.
+- Iteration: visitor sees the refined prompt, can Approve (submits to the
+  existing fast/refined 3D flow unchanged) or Request changes (free-text
+  "make it more X", which becomes another refinement round -- the
+  previous round's output becomes the new IDEA, the visitor's free text
+  becomes FEEDBACK). No round cap. Each round is its own async Kaggle
+  job through the same submit/poll/retrieve pattern as 3D generation.
+  Refinement history is tracked client-side (an array of {input,
+  feedback, output} per round) -- the backend has no need to persist
+  cross-round state itself, since each round is an independent job.
+- Uses the visitor's own Kaggle token, same as every other job in this
+  project -- never a shared/developer credential.
+
+### Milestones
+1. ~~Kaggle kernel: build + manually verify with real Kaggle runs
+   (including the "batman phone holder" example), in isolation before
+   touching the pipeline.~~ done
+2. Pipeline integration: submit/poll/retrieve reusing the existing async
+   job pattern (jobs.py/kernel_builder.py/kaggle_client.py), proven
+   end-to-end with a real Kaggle call, no manual steps.
+3. Iteration UI on /create: Quick vs Advanced choice, approve/request-
+   changes flow, visible refinement history, "this takes real time"
+   messaging -- verified visually.
+4. Wire the approved refined prompt into the existing fast/refined 3D
+   flow unchanged; confirm no regression to the Quick path.
+5. FAQ update (GPU-hour impact of the Advanced path) + a full manual
+   smoke test covering both Quick and Advanced end to end.
 
 ## Working rules
 - Small, independently tested milestones. Commit + push after each passing
@@ -1114,3 +1168,100 @@ what's next.)
   functionally complete per its own spec. Remaining open item: `ADMIN_TOKEN`
   is not yet set on Render (only the admin feedback-reading view is
   affected, nothing visitor-facing).
+
+- 2026-08-27/28: Milestone 8 kicked off, two ordered pieces of work per
+  direct instruction: a design/visual polish pass first, then the
+  AI-refined-prompt feature (full spec added above).
+
+  Tooling install: `npx skills add emilkowalski/skills` and `npx skills
+  add Leonxlnx/taste-skill` (25 design/animation/taste skills, both
+  flagged 0 security alerts by the installer's own scan), `npx impeccable
+  install` (anti-pattern detector, v4.1.1). `claude mcp add playwright`
+  could not run -- no standalone `claude` CLI binary exists in this
+  session's runtime -- substituted the already-available Claude_Browser
+  tools instead, which serve the same "screenshot and verify" purpose;
+  told the developer this substitution directly rather than silently
+  treating it as done. Node.js itself had to be installed first via
+  winget, which hit a UAC elevation prompt that couldn't be approved
+  non-interactively -- emailed the developer per their standing
+  preference (see memory) rather than waiting silently; they approved it
+  from their machine and the install completed (Node v24.19.0).
+
+  Design pass (2 commits, both pushed): read the `emil-design-eng` and
+  `high-end-visual-design` skills for concrete guidance rather than
+  guessing at "good design," then applied the former's craft-level
+  patterns (custom cubic-bezier easings, explicit `:active`/
+  `:focus-visible` states, entrance animations with a real purpose --
+  "preventing jarring changes," not decoration) globally via style.css:
+  custom easing variables, press feedback on every button/tier-option,
+  keyboard focus outlines (previously undefined outside form inputs), a
+  slide-up cookie-banner entrance, a scroll-reveal for the landing page's
+  hero/steps/example sections, fade-in on form banners and the job/result
+  status cards, and a missing focus transition on textarea/input/select
+  borders. Deliberately did not chase `high-end-visual-design`'s more
+  aggressive agency-tier theatrics (banned-fonts list, double-bezel
+  nested cards, noise overlays) -- PrintForge is a functional utility
+  tool, not a marketing site, and the existing system-font stack/clean
+  card style is a reasonable, pragmatic choice worth keeping.
+
+  Real, non-hypothetical finding during verification: this session's
+  Browser pane tools don't actually composite/paint frames (confirmed via
+  repeated `screenshot` timeouts: "the page is not compositing frames"),
+  which also silently breaks IntersectionObserver callbacks and in-flight
+  CSS transitions in this specific environment (proved via direct
+  `getComputedStyle` probing -- an inline `transition: none` override
+  immediately reported the correct target value, while the transitioned
+  version stayed stuck at its start value indefinitely). Real screenshots
+  and live-transition verification were not available here; adapted by
+  running a local dev server and verifying structurally instead
+  (accessibility tree, console errors, computed-style/cascade-specificity
+  checks) -- and said so plainly rather than claiming a screenshot-based
+  verification that didn't happen.
+
+  That structural verification caught a real bug before it shipped: the
+  first draft of the scroll-reveal hid `.reveal` elements at `opacity:0`
+  unconditionally in CSS, so any JS error or unsupported
+  IntersectionObserver would have left real landing-page content
+  permanently invisible for actual visitors -- not just an artifact of
+  the non-compositing test session. Fixed with proper progressive
+  enhancement: elements are visible by default, JS only opts into the
+  hidden starting state after confirming the observer is wired up, and a
+  1.5s fallback timeout force-reveals everything regardless of whether an
+  observer entry ever fires. 105/105 backend tests still passing
+  throughout (no backend touched, confirmed after each commit).
+
+  AI-refined-prompt feature, Milestone 1 (Kaggle kernel) -- done.
+  `kaggle_kernel/printforge_prompt_refiner/`: Qwen2.5-1.5B-Instruct
+  (Apache 2.0, ungated, ~2.4GB), CPU-only via `enable_gpu: false` --
+  chosen deliberately so unlimited refinement rounds never touch the
+  weekly GPU-hour quota the fast/refined 3D tiers depend on, matching the
+  parametric tier's proven no-GPU-kernel precedent rather than assuming
+  a new pattern would work. Takes IDEA (raw idea, or previous round's
+  output) and FEEDBACK (empty on round 1, else the visitor's requested
+  change) as literals rewritten by kernel_builder.py before each push --
+  same safe function-based `re.sub` injection AI_3D_FACTORY's history
+  already proved necessary over naive string replacement, to avoid
+  mangling backslashes/quotes in visitor text. Writes `report.json` with
+  `{"passed": bool, "refined_prompt": str}`, matching the existing
+  fast/refined kernels' report convention.
+
+  Verified with two real Kaggle runs on the developer's own account
+  (`levlar`), pushed/polled/retrieved manually exactly like every other
+  kernel in this project's history, before any pipeline code was
+  written: round 1, the spec's own example ("batman phone holder") ->
+  a genuinely detailed 502-character prompt covering material, tilt
+  angle, edge treatment, and stability, taking ~2.5 minutes end to end
+  (kernel startup + pip install + model download + inference). Round 2,
+  feeding round 1's output back in as IDEA with FEEDBACK = "make it look
+  more like actual Batman armor, with a bat-shaped silhouette and
+  armored plating" -> the model correctly revised only the relevant
+  clauses ("armored plating," "bat-shaped silhouette") while leaving the
+  rest of the prompt consistent, taking ~3 minutes. Confirmed via
+  `kaggle quota` before and after both runs: GPU quota unchanged (28.02h
+  remaining both times) -- direct proof the CPU-only design choice
+  achieves its actual goal, not just a theoretical claim.
+
+  Next: Milestone 2, pipeline integration -- submit/poll/retrieve for
+  refinement rounds through the existing async job pattern
+  (jobs.py/kernel_builder.py/kaggle_client.py), proven end-to-end with a
+  real Kaggle call before building the iteration UI on top of it.
