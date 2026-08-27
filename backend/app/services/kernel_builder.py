@@ -34,6 +34,14 @@ TIERS = {
         "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "printforge_creative_refined"),
         "accelerator": "NvidiaTeslaT4",
     },
+    # Milestone 8: the opt-in "Advanced" prompt-refinement pre-processing
+    # step. CPU-only on purpose -- text expansion doesn't need a GPU, and
+    # skipping the accelerator means unlimited refinement rounds never
+    # touch the same weekly GPU-hour quota the tiers above depend on.
+    "refine": {
+        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "printforge_prompt_refiner"),
+        "accelerator": None,
+    },
 }
 
 
@@ -41,7 +49,7 @@ def _slug(job_id):
     return re.sub(r"[^a-z0-9-]", "", f"printforge-{job_id}".lower())
 
 
-def build_kernel(tier_key, job_id, username, spec=None, prompt=None):
+def build_kernel(tier_key, job_id, username, spec=None, prompt=None, idea=None, feedback=None):
     """Copy the tier's template into a fresh temp dir, ready to `kaggle
     kernels push -p <returned dir>`. Returns (kernel_dir, kernel_id).
     """
@@ -75,6 +83,22 @@ def build_kernel(tier_key, job_id, username, spec=None, prompt=None):
         content = re.sub(
             r'^PROMPT = ".*"$',
             lambda _match: f"PROMPT = {json.dumps(prompt)}",
+            content,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    if idea is not None:
+        content = re.sub(
+            r'^IDEA = ".*"$',
+            lambda _match: f"IDEA = {json.dumps(idea)}",
+            content,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    if feedback is not None:
+        content = re.sub(
+            r'^FEEDBACK = ".*"$',
+            lambda _match: f"FEEDBACK = {json.dumps(feedback)}",
             content,
             count=1,
             flags=re.MULTILINE,

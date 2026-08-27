@@ -50,3 +50,30 @@ def test_tiers_have_expected_accelerators():
     assert kernel_builder.TIERS["parametric"]["accelerator"] is None
     assert kernel_builder.TIERS["fast"]["accelerator"] == "NvidiaTeslaT4"
     assert kernel_builder.TIERS["refined"]["accelerator"] == "NvidiaTeslaT4"
+    # CPU-only on purpose -- see refine tier's docstring in kernel_builder.py.
+    assert kernel_builder.TIERS["refine"]["accelerator"] is None
+
+
+def test_build_kernel_refine_injects_idea_and_feedback():
+    kernel_dir, kernel_id = kernel_builder.build_kernel(
+        "refine", "xyz789", "testuser", idea="a batman phone holder", feedback="make it more armored"
+    )
+    try:
+        with open(f"{kernel_dir}/run.py", encoding="utf-8") as f:
+            content = f.read()
+        assert 'IDEA = "a batman phone holder"' in content
+        assert 'FEEDBACK = "make it more armored"' in content
+    finally:
+        kernel_builder.cleanup(kernel_dir)
+
+
+def test_build_kernel_refine_round_one_has_empty_feedback():
+    kernel_dir, kernel_id = kernel_builder.build_kernel(
+        "refine", "abc111", "testuser", idea="a dragon figurine", feedback=""
+    )
+    try:
+        with open(f"{kernel_dir}/run.py", encoding="utf-8") as f:
+            content = f.read()
+        assert 'FEEDBACK = ""' in content
+    finally:
+        kernel_builder.cleanup(kernel_dir)

@@ -1261,7 +1261,64 @@ what's next.)
   remaining both times) -- direct proof the CPU-only design choice
   achieves its actual goal, not just a theoretical claim.
 
-  Next: Milestone 2, pipeline integration -- submit/poll/retrieve for
-  refinement rounds through the existing async job pattern
-  (jobs.py/kernel_builder.py/kaggle_client.py), proven end-to-end with a
-  real Kaggle call before building the iteration UI on top of it.
+  Milestone 2 (pipeline integration) -- done. Extended kernel_builder.py's
+  TIERS with a "refine" entry (CPU-only) and its build_kernel() with
+  idea/feedback injection, reusing the same safe function-based `re.sub`
+  pattern PROMPT already used (not naive string replacement -- see
+  AI_3D_FACTORY's history on why that mangles backslashes). New
+  backend/app/services/refinement.py mirrors generation.py's submit/
+  check/_retrieve_and_finalize shape closely, but with two deliberate,
+  documented differences: refinement rounds are never mirrored into
+  Postgres via accounts.record_job_start/update (a round isn't a
+  deliverable for dashboard history, just an ephemeral pre-processing
+  step -- only the real generation job submitted after Approve gets
+  recorded, unchanged), and refinement submissions skip rate_limit's
+  5/day cap while still honoring its concurrency check. That skip is
+  deliberate, not an oversight: the cap is shared with 3D-generation
+  submissions in the same jobs.py store, and this feature's spec
+  explicitly calls for *unlimited* iteration rounds -- applying the daily
+  cap here would let a few refinement rounds silently exhaust a visitor's
+  ability to submit their actual generation job the same day. New routes
+  in backend/app/routes/refine.py (POST /api/refine, GET
+  /api/refine/{id}), registered in main.py.
+
+  20 new tests (kernel_builder's refine-tier injection incl. an
+  empty-feedback round 1; refinement.py's validation/rate-limit-skip/
+  concurrency-still-blocks/complete/refine_failed/error paths; HTTP-level
+  route tests), all mocking Kaggle calls per this project's standing
+  rule. 125/125 tests passing.
+
+  Then proved the actual requirement -- "no manual steps" -- with one
+  real, unmocked round trip through the live Python code path itself
+  (not the manual kernel-push dance Milestone 1 used): POST /api/refine
+  against a local dev server with the developer's real Kaggle token and
+  "a batman phone holder", then polled GET /api/refine/{id} until
+  status flipped to "complete" with a genuine, detailed refined_prompt
+  -- confirming kernel_builder's injection, kaggle_client's push/status/
+  retrieve, and refinement.py's report-parsing all work correctly
+  through the real API surface, not just in isolation. One thing
+  double-checked rather than assumed benign: the returned text displayed
+  a corrupted apostrophe (`Batman�s`) in this session's Git Bash
+  terminal. Inspected the raw report.json bytes on disk directly (not
+  just the terminal output) and confirmed they correctly contain
+  `’` (a proper Unicode right single quote) -- the corruption is
+  purely this terminal's console-encoding display, not a bug in the
+  stored data or the JSON round trip a real browser's `fetch()` would
+  see. No fix needed; documented so a future session doesn't waste time
+  re-diagnosing the same non-bug.
+
+  While setting up a local dev server for this and the earlier design
+  pass, found and fixed a real (if minor) dev-tooling bug: launch.json's
+  `uvicorn --reload` was watching this session's own worktree directory
+  by default instead of PrintForge/backend (where `--app-dir` actually
+  pointed), so the very first end-to-end attempt hit a stale process and
+  404'd on the brand-new /api/refine route. Fixed with an explicit
+  `--reload-dir`; confirmed via the server's own startup log line
+  ("Will watch for changes in...") before retrying, rather than guessing
+  the fix worked.
+
+  Next: Milestone 3, the iteration UI on /create -- Quick vs Advanced
+  choice, approve/request-changes flow, visible refinement history, and
+  "this takes real time" messaging (the real runs above took ~2.5-3
+  minutes per round end to end, worth reflecting honestly in the copy
+  rather than lowballing it as "1 minute").

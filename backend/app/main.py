@@ -25,6 +25,7 @@ from app.routes.create import router as create_router
 from app.routes.auth import router as auth_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.feedback import router as feedback_router
+from app.routes.refine import router as refine_router
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 FRONTEND_DIR = os.path.join(REPO_ROOT, "frontend")
@@ -46,6 +47,7 @@ app.include_router(create_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(feedback_router)
+app.include_router(refine_router)
 
 app.add_middleware(
     CORSMiddleware,
