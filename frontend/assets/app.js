@@ -109,3 +109,45 @@ function initCookieConsent() {
 }
 
 initCookieConsent();
+
+// Scroll-reveal for landing-page sections: fade+slide elements marked
+// .reveal into view once, first time they cross the viewport.
+//
+// Progressive enhancement, deliberately defensive: .reveal elements are
+// fully visible by default in CSS. Only after this function confirms
+// IntersectionObserver works does it add js-reveal-ready to <html>, which
+// is what actually makes .reveal elements start hidden (see style.css).
+// A timeout also force-reveals everything after 1.5s regardless, in case
+// an observer never fires for some elements (seen in at least one
+// automated/headless browsing context during testing) -- real content
+// must never stay invisible waiting on a scroll event that may not come.
+function initScrollReveal() {
+  const targets = document.querySelectorAll(".reveal");
+  if (!targets.length) return;
+  if (!("IntersectionObserver" in window) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return; // elements are already visible by default -- nothing to do
+  }
+
+  document.documentElement.classList.add("js-reveal-ready");
+
+  const reveal = (el) => el.classList.add("in-view");
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          reveal(entry.target);
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.15, rootMargin: "0px 0px -40px 0px" }
+  );
+  targets.forEach((el) => observer.observe(el));
+
+  setTimeout(() => {
+    targets.forEach(reveal);
+    observer.disconnect();
+  }, 1500);
+}
+
+initScrollReveal();

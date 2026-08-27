@@ -13,10 +13,21 @@
   --warn: #fbbf24;
   --radius: 12px;
   --max-width: 1080px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 html, body {
   margin: 0;
@@ -65,6 +76,7 @@ a { color: var(--accent); }
   color: var(--text-muted);
   text-decoration: none;
   font-size: 0.95rem;
+  transition: color 150ms var(--ease-out);
 }
 .nav-links a:hover { color: var(--text); }
 .btn {
@@ -76,15 +88,16 @@ a { color: var(--accent); }
   text-decoration: none;
   border: none;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 120ms var(--ease-out);
 }
+.btn:active { transform: scale(0.97); }
 .btn-primary {
   background: var(--accent);
   color: var(--accent-text);
 }
 .btn-primary:hover { background: var(--accent-hover); }
-.btn-primary:active { transform: scale(0.98); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary:disabled:active { transform: none; }
 .btn-secondary {
   background: transparent;
   color: var(--text);
@@ -198,8 +211,39 @@ footer .container {
   flex-wrap: wrap;
   gap: 12px;
 }
-footer a { color: var(--text-muted); text-decoration: none; margin-right: 16px; }
+footer a {
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-right: 16px;
+  transition: color 150ms var(--ease-out);
+}
 footer a:hover { color: var(--text); }
+
+/* --- Scroll-reveal (landing page sections) ---
+   Elements start fully visible by default (progressive enhancement): the
+   hidden starting state only applies once js-reveal-ready is set on <html>
+   by app.js, right before it wires up the IntersectionObserver. This way a
+   JS error anywhere earlier in the page, a disabled/broken
+   IntersectionObserver, or JS not running at all never leaves real content
+   permanently invisible -- worst case, the reveal animation just doesn't
+   play and everything is shown immediately (app.js also force-reveals
+   everything after a short timeout as a second safety net). */
+.js-reveal-ready .reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+}
+.reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-group .reveal:nth-child(1) { transition-delay: 0ms; }
+.reveal-group .reveal:nth-child(2) { transition-delay: 60ms; }
+.reveal-group .reveal:nth-child(3) { transition-delay: 120ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .js-reveal-ready .reveal { opacity: 1; transform: none; transition: none; }
+}
 
 /* --- Sticky mobile CTA --- */
 .sticky-cta {
@@ -238,6 +282,14 @@ footer a:hover { color: var(--text); }
   background: var(--bg-elevated);
   border-top: 1px solid var(--border);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+  animation: cookie-banner-in 400ms var(--ease-out);
+}
+@keyframes cookie-banner-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cookie-banner { animation: none; }
 }
 .cookie-banner p {
   margin: 0;
@@ -304,7 +356,9 @@ textarea:focus, input:focus, select:focus {
   padding: 14px;
   cursor: pointer;
   background: var(--bg-elevated);
+  transition: border-color 150ms var(--ease-out), background 150ms var(--ease-out), transform 120ms var(--ease-out);
 }
+.tier-option:active { transform: scale(0.98); }
 .tier-option.selected {
   border-color: var(--accent);
   background: rgba(255, 122, 61, 0.08);
