@@ -152,30 +152,55 @@ Not yet vendored/ported (deferred to when they're actually needed):
   added. See Progress Log.
 
 ## Status
-Milestones 1-5 are done, and Milestone 1's hosting-deploy confirmation
-(long pending) is now closed out -- the site is genuinely live at
-https://printforge-bbs1.onrender.com, verified with real requests against
-the real deployment, not just locally. Milestone 5's Supabase connection
-is confirmed working for real (a live signup created a real row). Two real
-production bugs were found and fixed only by testing the live deploy
-rather than trusting local/mocked tests: a missing `kaggle` dependency
-(only ever installed by hand locally, never declared) and an unhandled
-exception path in signup/login when `SESSION_SECRET` isn't set. The
-developer still needs to set `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY`
-on Render for accounts to fully work end-to-end (DB connectivity itself is
-confirmed fine) -- see "Known blockers".
+All 7 milestones are done, including the originally-deferred creative
+tier, and the full flow has been smoke-tested end-to-end against the real
+live site (https://printforge-bbs1.onrender.com) -- not locally, not
+mocked. Anonymous parametric generation, anonymous creative generation
+(both tiers), signup/login, saving a Kaggle token, submitting a job that
+uses the saved token instead of a pasted one, dashboard history, preview/
+download (both the job-status and dashboard-specific routes), deleting a
+job, deleting a saved token, and deleting an account -- every one of
+these was exercised with real HTTP requests against the deployed service,
+most using a real Kaggle token and a real generation run, not a
+stand-in. The project is functionally complete per its own spec.
 
-## Current milestone: 7 — Analytics, cookie consent, final polish
-Google Analytics + cookie consent (done), sticky mobile CTA (already done
-in Milestone 3), final polish pass (done). Creative-tier (fast/refined)
-generation -- deferred since Milestone 2 -- is now built and verified for
-real on live Kaggle infrastructure (both tiers, including the base-added/
-material-fixed path). Full manual smoke test of the complete flow
-end-to-end (anonymous + logged-in, fast + refined) is done for everything
-except the logged-in path, which is still waiting on the developer's
-Render `SESSION_SECRET`/`TOKEN_ENCRYPTION_KEY` env vars to actually take
-effect (see "Known blockers"). Project is functionally complete pending
-that one external confirmation.
+Getting the logged-in flow fully working surfaced two more real
+production bugs beyond the ones already logged in Milestone 6/7 entries,
+both found only by actually running the live flow (never showed up in
+local dev or the mocked test suite, since both are specific to the
+deployed environment's exact configuration):
+1. `kaggle_client.py` hardcoded the literal command `"python"` for every
+   Kaggle CLI subprocess call. Render's container only has `python3` on
+   PATH, so this failed for *every* kaggle_client call, not just the one
+   that happened to surface it first -- meaning the entire create flow
+   was likely broken on the live site the whole time, not merely
+   token-saving. Fixed with `sys.executable` (the exact interpreter
+   already running the process), which is correct regardless of what a
+   given deployment environment does or doesn't alias.
+2. `TOKEN_ENCRYPTION_KEY` was initially set on Render in a format Fernet's
+   own constructor rejects (not real `Fernet.generate_key()` output) --
+   `token_crypto._fernet()` didn't catch that `ValueError`, and no route
+   caught the resulting `EncryptionNotConfiguredError` either (unlike the
+   equivalent `DatabaseNotConfiguredError`, which already had a global
+   handler). Both gaps fixed; regenerated a correct key for the developer
+   to paste in.
+
+Both were diagnosed the right way, not guessed: since this assistant has
+no direct access to Render's server logs, resolved each by reasoning from
+what the code could and couldn't have raised, verifying candidate fixes
+locally first, then confirming against the live deployment -- not by
+trial-and-error redeploys.
+
+## Milestone 7 — Analytics, cookie consent, final polish, creative tier
+Done. Google Analytics + cookie consent, sticky mobile CTA (Milestone 3),
+final polish pass, and creative-tier (fast/refined) generation (deferred
+since Milestone 2, built and verified live this milestone). See Progress
+Log for the full story on each.
+
+## Current milestone: none — all 7 milestones complete
+Nothing further is planned without additional direction. The only open
+item is `ADMIN_TOKEN` not yet being set on Render (admin feedback view
+only, nothing visitor-facing) -- see "Known blockers".
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -220,18 +245,16 @@ assistant does without the account owner present).
   repo, Claude added the remote and pushed).
 - Render: resolved. Live at https://printforge-bbs1.onrender.com, confirmed
   with real requests (not just "the build succeeded").
-- Database: resolved for connectivity -- `DATABASE_URL` is set on Render
-  and confirmed working with a real write (a live signup created a real
-  row in the `users` table; see Progress Log for the full diagnosis story,
-  including the free-vs-paid Supabase pooler question). Still open:
-  `SESSION_SECRET` and `TOKEN_ENCRYPTION_KEY` are not yet set on Render --
-  signup/login currently fail with a clear "SESSION_SECRET is not
-  configured" error until the developer sets them (generation commands in
-  `.env.example`). Everything else on the live site works fully without
-  them in the meantime.
-- Admin view: `ADMIN_TOKEN` (new in Milestone 6) is not yet set on Render
-  either -- same pattern, same fix (developer generates and sets it,
-  nothing for Claude to provision).
+- Database: resolved, fully. `DATABASE_URL`, `SESSION_SECRET`, and
+  `TOKEN_ENCRYPTION_KEY` are all set correctly on Render (the first
+  attempt at the latter two was mistakenly added as Render "Secret Files"
+  rather than Environment Variables, which don't populate `os.environ`
+  the same way -- resolved once corrected) and confirmed working with a
+  full real account-flow smoke test (see Progress Log).
+- Admin view: `ADMIN_TOKEN` (Milestone 6) is still not set on Render --
+  same pattern, same fix (developer generates and sets it, nothing for
+  Claude to provision). Only the admin feedback-reading view is affected;
+  nothing visitor-facing depends on it.
 
 ## Progress Log
 (Append a dated entry after each milestone — what changed, what passed,
@@ -1005,3 +1028,89 @@ what's next.)
   everything in the original 7-milestone plan except the still-pending
   Render `SESSION_SECRET`/`TOKEN_ENCRYPTION_KEY` confirmation and the
   associated logged-in-tier smoke test.
+
+- 2026-08-27: Logged-in account flow -- fully smoke-tested against the
+  real live site, two more real production bugs found and fixed along
+  the way. This closes out the last open item from the original plan.
+
+  Developer set `SESSION_SECRET`/`TOKEN_ENCRYPTION_KEY` on Render, but
+  the live site kept returning the same "SESSION_SECRET is not
+  configured" error even after a confirmed redeploy. Root cause, found by
+  the developer checking Render's own dashboard: they'd been added as
+  Render "Secret Files" (which mount a file at a path) rather than
+  Environment Variables (which populate `os.environ`) -- this app reads
+  `os.environ.get("SESSION_SECRET")`, so a secret file never reached it
+  regardless of content. Resolved once corrected.
+
+  With that fixed, signup/login started working live -- but saving a
+  Kaggle token to the account still 500'd. Diagnosed without access to
+  Render's server logs (not available to this assistant), by reasoning
+  through what the code could raise and verifying candidates before
+  trusting them:
+  1. `kaggle_client._run_with_token` hardcoded the literal command
+     `"python"` for every subprocess call to the kaggle CLI. Render's
+     container only has `python3` on PATH -- `subprocess.run(["python",
+     ...])` would raise a bare `FileNotFoundError`, not one of this
+     module's own exception types, so it was never caught anywhere and
+     surfaced as a raw 500. This affects *every* kaggle_client call
+     (resolve_username, push_kernel, get_status, retrieve_output), so the
+     entire create flow was likely broken on the live site the whole
+     time -- token-saving just happened to be the first thing that
+     exercised it after the SESSION_SECRET fix unblocked testing that far.
+     Fixed with `sys.executable` (the exact interpreter already running
+     this process, correct regardless of what a given environment does or
+     doesn't alias) and wrapped the subprocess.run call itself so any
+     future launch failure surfaces as a clean `KaggleCliError` instead
+     of an unhandled exception -- then updated both call sites
+     (`accounts.save_kaggle_token`, `generation.submit_request`) to
+     handle that error type with a proper 502. Verified locally against
+     real Kaggle after the fix, then pushed.
+  2. Retesting after that fix *still* 500'd on token-save. The developer
+     couldn't run the Fernet-key-generation command locally (no
+     `cryptography` package installed on their machine), so this
+     assistant ran it and provided the output directly -- a judgment call
+     under the project's credential-handling philosophy: this is a
+     self-generated *application* secret with no prior data depending on
+     it, not a third-party account credential, and the developer
+     explicitly asked for it since they had no other way to produce it.
+     Root cause confirmed once a definitely-valid key was in hand: the
+     original `TOKEN_ENCRYPTION_KEY` value hadn't been in real Fernet key
+     format, and `token_crypto._fernet()` didn't catch the `ValueError`
+     Fernet's constructor raises for that -- nor did any route catch the
+     resulting `EncryptionNotConfiguredError`, unlike the equivalent
+     `DatabaseNotConfiguredError`, which already had a global FastAPI
+     exception handler from Milestone 5. Fixed both gaps (catch +
+     reraise as the existing error type; registered the missing global
+     handler, same pattern as the database one) and had the developer
+     paste in the freshly-generated key.
+
+  With both fixed, ran the complete logged-in flow for real against the
+  live site, every step a genuine HTTP request against the deployed
+  service (session cookies, not a bypass): log in -> save a real Kaggle
+  token -> submit a parametric request with *no token in the request
+  body* (proving the saved-token fallback works) -> poll to completion
+  (real Kaggle round trip) -> fetch the real STL (3084 bytes) and preview
+  PNG (301528 bytes) via both the job-status route and the
+  dashboard-specific route (two different code paths, both confirmed) ->
+  confirm the job appears in dashboard history with a 7-day expiry ->
+  delete the job (dashboard goes back to empty) -> delete the saved token
+  (`has_saved_token` back to false) -> delete the account entirely ->
+  confirm via a follow-up login attempt that the account is genuinely
+  gone (401, not "already exists"). Every step passed. Also cleaned up
+  the throwaway test account created during earlier live-deploy
+  diagnosis, as offered back when it was first created.
+
+  105 tests passing (8 new across this incident: a `sys.executable`/
+  error-wrapping regression suite for kaggle_client, plus malformed-key
+  regression tests for token_crypto and its route-level 503 behavior).
+
+  Also recorded as a standing preference for future sessions: proactively
+  email the developer (not just wait in chat) when blocked on something
+  only they can do and they might be away from their computer -- stated
+  directly during this debugging session, saved to memory.
+
+  This closes out every milestone in the original plan, including the
+  creative tier that was deferred back in Milestone 2. PrintForge is
+  functionally complete per its own spec. Remaining open item: `ADMIN_TOKEN`
+  is not yet set on Render (only the admin feedback-reading view is
+  affected, nothing visitor-facing).
