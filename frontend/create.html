@@ -31,6 +31,53 @@
             <div class="field-hint" id="classification-hint"></div>
           </div>
 
+          <div class="field" id="mode-field" style="display:none">
+            <label>Generation mode</label>
+            <div class="tier-options">
+              <div class="tier-option selected" data-mode="quick">
+                <h4>Quick (default)</h4>
+                <p>Generate directly from your description above.</p>
+              </div>
+              <div class="tier-option" data-mode="advanced">
+                <h4>Advanced: AI-refined prompt</h4>
+                <p>An AI expands your idea into a more detailed prompt first, with a preview step and as many rounds as you want to adjust it. Slower -- each round is its own free Kaggle job (a few minutes) and uses a bit more of your weekly GPU-hour quota.</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="advanced-panel" style="display:none">
+            <div class="field">
+              <div class="banner banner-info">Each round runs its own free Kaggle job and can take a few minutes (kernel startup + AI inference). There's no limit to how many rounds you can do.</div>
+            </div>
+
+            <div id="refine-history"></div>
+
+            <div class="field" id="refine-status-field" style="display:none">
+              <div class="status-card" style="padding:24px">
+                <div class="spinner" style="width:28px;height:28px;margin-bottom:12px"></div>
+                <p id="refine-status-text" style="margin:0">Refining your prompt…</p>
+              </div>
+            </div>
+
+            <div class="field" id="refine-result-field" style="display:none">
+              <label>Refined prompt</label>
+              <div class="example-prompt" id="refined-prompt-display"></div>
+              <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap">
+                <button type="button" class="btn btn-primary" id="approve-refined-btn">Approve &amp; use this prompt</button>
+                <button type="button" class="btn btn-secondary" id="show-feedback-btn">Request changes</button>
+              </div>
+              <div class="field" id="feedback-field" style="display:none; margin-top:16px">
+                <label for="feedback-input">What should change?</label>
+                <textarea id="feedback-input" placeholder="e.g. make it more armored, with a bat-shaped silhouette"></textarea>
+                <button type="button" class="btn btn-primary" id="submit-feedback-btn" style="margin-top:10px">Refine again</button>
+              </div>
+            </div>
+
+            <div class="field" id="refine-start-field">
+              <button type="button" class="btn btn-primary" id="start-refine-btn">Refine my prompt</button>
+            </div>
+          </div>
+
           <div class="field" id="tier-field" style="display:none">
             <label>Quality tier</label>
             <div class="tier-options">
@@ -92,7 +139,7 @@
 const form = document.getElementById("create-form");
 const promptField = document.getElementById("prompt");
 const tierField = document.getElementById("tier-field");
-const tierOptions = document.querySelectorAll(".tier-option");
+const tierOptions = document.querySelectorAll(".tier-option[data-tier]");
 const bannerSlot = document.getElementById("banner-slot");
 const classificationHint = document.getElementById("classification-hint");
 const submitBtn = document.getElementById("submit-btn");
@@ -102,9 +149,28 @@ const tokenField = document.getElementById("token-field");
 const tokenInput = document.getElementById("token");
 const useDifferentToken = document.getElementById("use-different-token");
 
+const modeField = document.getElementById("mode-field");
+const modeOptions = document.querySelectorAll(".tier-option[data-mode]");
+const advancedPanel = document.getElementById("advanced-panel");
+const refineHistoryEl = document.getElementById("refine-history");
+const refineStatusField = document.getElementById("refine-status-field");
+const refineStatusText = document.getElementById("refine-status-text");
+const refineResultField = document.getElementById("refine-result-field");
+const refinedPromptDisplay = document.getElementById("refined-prompt-display");
+const approveRefinedBtn = document.getElementById("approve-refined-btn");
+const showFeedbackBtn = document.getElementById("show-feedback-btn");
+const feedbackField = document.getElementById("feedback-field");
+const feedbackInput = document.getElementById("feedback-input");
+const submitFeedbackBtn = document.getElementById("submit-feedback-btn");
+const startRefineBtn = document.getElementById("start-refine-btn");
+const refineStartField = document.getElementById("refine-start-field");
+
 let selectedTier = "fast";
+let selectedMode = "quick";
 let classifyTimer = null;
 let hasSavedToken = false;
+let refinementRounds = [];
+let currentRefinedPrompt = null;
 
 initAuthNav("auth-nav-slot");
 
@@ -148,6 +214,8 @@ promptField.addEventListener("input", () => {
   const text = promptField.value.trim();
   if (!text) {
     tierField.style.display = "none";
+    modeField.style.display = "none";
+    advancedPanel.style.display = "none";
     classificationHint.textContent = "";
     return;
   }
@@ -156,15 +224,142 @@ promptField.addEventListener("input", () => {
       const result = await apiPost("/api/classify", { text });
       if (result.classification === "creative") {
         tierField.style.display = "block";
-        classificationHint.textContent = "This looks like a themed/creative request — pick a quality tier below.";
+        modeField.style.display = "block";
+        classificationHint.textContent = "This looks like a themed/creative request — pick a quality tier and generation mode below.";
       } else {
         tierField.style.display = "none";
+        modeField.style.display = "none";
+        advancedPanel.style.display = "none";
         classificationHint.textContent = "This looks like a parametric request (has measurements) — no tier needed.";
       }
     } catch (e) {
       // Classification is a UX nicety; a failure here shouldn't block submission.
     }
   }, 400);
+});
+
+modeOptions.forEach((el) => {
+  el.addEventListener("click", () => {
+    modeOptions.forEach((o) => o.classList.remove("selected"));
+    el.classList.add("selected");
+    selectedMode = el.dataset.mode;
+    if (selectedMode === "advanced") {
+      advancedPanel.style.display = "block";
+      setSubmitVisible(!!currentRefinedPrompt);
+    } else {
+      advancedPanel.style.display = "none";
+      setSubmitVisible(true);
+    }
+  });
+});
+
+function setSubmitVisible(visible) {
+  submitBtn.style.display = visible ? "" : "none";
+  submitBtn.disabled = !visible;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function renderRefinementHistory() {
+  if (!refinementRounds.length) {
+    refineHistoryEl.innerHTML = "";
+    return;
+  }
+  refineHistoryEl.innerHTML = refinementRounds.map((round, i) => `
+    <div class="banner banner-info" style="text-align:left">
+      <strong>Round ${i + 1}${round.feedback ? ` — requested: "${escapeHtml(round.feedback)}"` : " — initial expansion"}</strong>
+      <div style="margin-top:6px">${escapeHtml(round.output)}</div>
+    </div>
+  `).join("");
+}
+
+async function runRefinementRound(idea, feedback) {
+  refineStartField.style.display = "none";
+  refineResultField.style.display = "none";
+  feedbackField.style.display = "none";
+  refineStatusField.style.display = "block";
+  refineStatusText.textContent = feedback ? "Applying your requested change…" : "Refining your prompt…";
+  setSubmitVisible(false);
+
+  const usingSavedToken = hasSavedToken && !useDifferentToken.checked;
+  const body = { idea };
+  if (feedback) body.feedback = feedback;
+  if (!usingSavedToken) body.kaggle_token = tokenInput.value.trim();
+
+  try {
+    const { job_id } = await apiPost("/api/refine", body);
+    await pollRefinement(job_id, idea, feedback);
+  } catch (e) {
+    refineStatusField.style.display = "none";
+    showBanner("error", e.message || "Couldn't start the refinement round. Please try again.");
+    refineStartField.style.display = "block";
+  }
+}
+
+function pollRefinement(jobId, idea, feedback) {
+  return new Promise((resolve) => {
+    async function tick() {
+      let job;
+      try {
+        job = await apiGet(`/api/refine/${encodeURIComponent(jobId)}`);
+      } catch (e) {
+        refineStatusField.style.display = "none";
+        showBanner("error", e.message || "Couldn't check refinement status.");
+        refineStartField.style.display = "block";
+        resolve();
+        return;
+      }
+      if (job.status === "complete") {
+        refinementRounds.push({ input: idea, feedback, output: job.refined_prompt });
+        currentRefinedPrompt = job.refined_prompt;
+        renderRefinementHistory();
+        refineStatusField.style.display = "none";
+        refinedPromptDisplay.textContent = currentRefinedPrompt;
+        refineResultField.style.display = "block";
+        resolve();
+        return;
+      }
+      if (job.status === "error" || job.status === "refine_failed") {
+        refineStatusField.style.display = "none";
+        showBanner("error", job.error || "Refinement failed. Please try again.");
+        refineStartField.style.display = "block";
+        resolve();
+        return;
+      }
+      setTimeout(tick, 6000);
+    }
+    tick();
+  });
+}
+
+startRefineBtn.addEventListener("click", () => {
+  const idea = promptField.value.trim();
+  if (!idea) return;
+  runRefinementRound(idea, "");
+});
+
+showFeedbackBtn.addEventListener("click", () => {
+  feedbackField.style.display = feedbackField.style.display === "none" ? "block" : "none";
+  if (feedbackField.style.display === "block") feedbackInput.focus();
+});
+
+submitFeedbackBtn.addEventListener("click", () => {
+  const feedback = feedbackInput.value.trim();
+  if (!feedback) return;
+  feedbackInput.value = "";
+  runRefinementRound(currentRefinedPrompt, feedback);
+});
+
+approveRefinedBtn.addEventListener("click", () => {
+  promptField.value = currentRefinedPrompt;
+  refineResultField.style.display = "none";
+  refineStartField.style.display = "none";
+  setSubmitVisible(true);
+  showBanner("info", 'Refined prompt approved — click "Generate my model" below to submit it.');
 });
 
 form.addEventListener("submit", async (event) => {

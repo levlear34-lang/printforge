@@ -1317,8 +1317,66 @@ what's next.)
   ("Will watch for changes in...") before retrying, rather than guessing
   the fix worked.
 
-  Next: Milestone 3, the iteration UI on /create -- Quick vs Advanced
-  choice, approve/request-changes flow, visible refinement history, and
-  "this takes real time" messaging (the real runs above took ~2.5-3
-  minutes per round end to end, worth reflecting honestly in the copy
-  rather than lowballing it as "1 minute").
+  Milestones 3+4 (iteration UI, wired into the existing generation flow)
+  -- done together, deliberately: the iteration UI's whole point is to
+  end in a working generation submission, so building it without also
+  wiring the final step would mean testing a dead end. One combined
+  commit, but both milestones' requirements are separately satisfied and
+  separately verified below.
+
+  frontend/create.html: a new "Generation mode" choice (Quick/Advanced)
+  appears alongside the existing quality-tier choice whenever a request
+  classifies as creative, reusing the exact same `.tier-option` visual
+  component for consistency (careful to scope the two click handlers by
+  `[data-tier]` vs `[data-mode]` attribute selectors, not just the shared
+  class, so they don't cross-bind). Advanced mode reveals a panel with a
+  "Refine my prompt" button, a status/spinner card while a round is in
+  flight, a rendered refinement history (every prior round's input/
+  feedback/output), and once a round completes, "Approve & use this
+  prompt" / "Request changes" actions -- the latter reveals a feedback
+  textarea that starts another round with the previous output as the new
+  idea. The GPU-hour/time tradeoff and "no limit on rounds" are stated
+  up front in the panel, not just implied.
+
+  Milestone 4's requirement (wire the approved prompt into the *existing*
+  fast/refined flow, unchanged) is satisfied about as directly as
+  possible: Approve simply writes the refined text into the same
+  `#prompt` textarea the Quick path already uses, then re-enables the
+  existing, completely untouched submit button and `form.addEventListener
+  ("submit", ...)` handler. Zero lines of the actual submission code
+  changed -- confirmed by diffing that handler against its pre-Milestone-8
+  version. The submit button is hidden/disabled for the entire time
+  Advanced mode has no approved prompt yet (so nothing can be submitted
+  mid-refinement), and reappears immediately on Approve or on switching
+  back to Quick mode.
+
+  Verified through the actual UI, not just by reading the code -- with
+  one adaptation forced by this session's environment: real screenshots
+  still aren't available here (see the design-pass entry above), and
+  driving the real token through browser automation would mean a secret
+  value passing through this session's tool-call layer for a test that
+  doesn't need to touch a real Kaggle account at all (Milestone 2 already
+  proved the real backend round trip independently). Instead, mocked
+  `window.fetch` in the live page for `/api/refine` and drove the actual
+  buttons end to end: clicked "Refine my prompt" -> confirmed the
+  status/spinner state and hidden submit button -> resolved to a result
+  with the refined text shown and history rendered -> clicked "Request
+  changes", entered feedback, clicked "Refine again" -> confirmed round 2
+  appended correctly to history with the right label -> clicked "Approve"
+  -> confirmed the textarea now holds the approved text and the submit
+  button is visible and enabled again. Also confirmed the Quick path
+  (mode left at its default) never reveals the advanced panel and leaves
+  the submit button untouched. 125/125 backend tests still passing
+  (frontend-only change).
+
+  Found and fixed a real dev-environment issue while testing this: the
+  local server was serving updated HTML correctly (confirmed via a
+  direct `curl`), but this session's Browser pane kept rendering a stale
+  cached version even after a forced reload -- worked around with a
+  cache-busting query string (`?v=N`) per navigation, which reliably
+  picked up the new markup. Noted here in case a future session hits the
+  same thing.
+
+  Next: Milestone 5, FAQ update (GPU-hour impact of the Advanced path)
+  and a full manual smoke test covering both Quick and Advanced end to
+  end on the live site.
