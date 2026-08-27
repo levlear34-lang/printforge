@@ -36,6 +36,11 @@
       </div>
 
       <div class="faq-item">
+        <h3>What's the "Advanced: AI-refined prompt" option?</h3>
+        <p>For themed/creative requests, a vague idea like "batman phone holder" sometimes doesn't give the 3D model enough to work with. Advanced mode runs a separate, small AI step first that expands your idea into a more detailed prompt — you can see exactly what it came up with, approve it, or ask for changes ("make it more armored") for as many rounds as you want before generating anything. Each round is its own free Kaggle job, same as generation itself, so it takes a few minutes per round (kernel startup + AI inference) and uses a bit more of your weekly GPU-hour quota — worth it if your first idea is very vague, unnecessary if you're already writing a detailed prompt yourself. Nothing is generated until you approve a refined prompt; Quick mode (the default) skips this entirely and generates directly from what you typed.</p>
+      </div>
+
+      <div class="faq-item">
         <h3>Is my Kaggle token stored?</h3>
         <p>Not unless you create an account and explicitly choose to save it. If you use PrintForge anonymously (or don't save a token), it's used only in memory for that one request and is never written to disk or logged. If you do save one, it's encrypted at rest and never displayed in plain text again — you can delete it from your dashboard at any time.</p>
       </div>
