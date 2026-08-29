@@ -20,9 +20,15 @@
   <section class="section">
     <div class="container">
       <div class="status-card" id="status-card">
-        <div class="spinner" id="spinner"></div>
-        <h2 id="status-title">Submitting your request…</h2>
-        <p id="status-detail">This can take a few minutes — Kaggle needs to queue and run the job.</p>
+        <div id="status-skeleton" style="margin-bottom:var(--space-6)">
+          <div class="skeleton skeleton-preview"></div>
+          <div class="skeleton skeleton-line" style="max-width:70%"></div>
+          <div class="skeleton skeleton-line" style="max-width:45%"></div>
+        </div>
+        <div role="status" aria-live="polite">
+          <h2 id="status-title">Submitting your request…</h2>
+          <p id="status-detail">This can take a few minutes — Kaggle needs to queue and run the job.</p>
+        </div>
         <p id="status-sub"></p>
       </div>
     </div>
@@ -33,7 +39,7 @@
 <script>
 const jobId = qs("id");
 const statusCard = document.getElementById("status-card");
-const spinner = document.getElementById("spinner");
+const statusSkeleton = document.getElementById("status-skeleton");
 const statusTitle = document.getElementById("status-title");
 const statusDetail = document.getElementById("status-detail");
 const statusSub = document.getElementById("status-sub");
@@ -41,7 +47,7 @@ const statusSub = document.getElementById("status-sub");
 if (!jobId) {
   statusTitle.textContent = "No job specified";
   statusDetail.textContent = "Start a new request from the create page.";
-  spinner.style.display = "none";
+  statusSkeleton.style.display = "none";
 } else {
   poll();
 }
@@ -60,14 +66,14 @@ async function poll() {
       return;
     }
     if (job.status === "error") {
-      spinner.style.display = "none";
+      statusSkeleton.style.display = "none";
       statusTitle.textContent = "Something went wrong";
       statusDetail.textContent = job.error || "The job failed. Please try again with a different request.";
       statusSub.innerHTML = `<a href="/create" class="btn btn-primary" style="margin-top:16px">Try again</a>`;
       return;
     }
     if (job.status === "quality_failed") {
-      spinner.style.display = "none";
+      statusSkeleton.style.display = "none";
       statusTitle.textContent = "The model didn't pass validation";
       statusDetail.textContent = job.error || "The generated mesh failed our quality checks. Try adjusting your request.";
       statusSub.innerHTML = `<a href="/create" class="btn btn-primary" style="margin-top:16px">Try again</a>`;
@@ -79,7 +85,7 @@ async function poll() {
     statusDetail.textContent = copy[1];
     setTimeout(poll, 6000);
   } catch (e) {
-    spinner.style.display = "none";
+    statusSkeleton.style.display = "none";
     statusTitle.textContent = "Couldn't check job status";
     statusDetail.textContent = e.message || "Please refresh the page to try again.";
   }

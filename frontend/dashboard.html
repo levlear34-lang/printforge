@@ -10,23 +10,25 @@
 <style>
 .job-row {
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: center;
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 12px;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  box-shadow: var(--shadow-sm);
 }
 .job-row img {
   width: 72px;
   height: 52px;
   object-fit: cover;
   border-radius: 6px;
-  background: #111;
+  background: var(--bg-elevated);
   flex-shrink: 0;
 }
-.job-row .job-thumb-placeholder {
+.job-row .job-thumb-placeholder,
+.job-row .skeleton-thumb {
   width: 72px;
   height: 52px;
   border-radius: 6px;
@@ -34,20 +36,21 @@
   flex-shrink: 0;
 }
 .job-row .job-info { flex: 1; min-width: 0; }
-.job-row .job-prompt { font-size: 0.92rem; margin: 0 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.job-row .job-meta { font-size: 0.8rem; color: var(--text-muted); margin: 0; }
-.job-row .job-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.job-row .job-prompt { font-size: var(--text-sm); font-weight: 500; margin: 0 0 var(--space-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job-row .job-meta { font-size: var(--text-xs); color: var(--text-muted); margin: 0; display: flex; align-items: center; gap: var(--space-1); }
+.job-row .job-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
 .account-card {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 24px;
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
 }
 .danger-zone {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
 }
 </style>
 </head>
@@ -74,7 +77,22 @@
       </div>
 
       <h3>Your models</h3>
-      <div id="jobs-list"><p style="color:var(--text-muted)">Loading…</p></div>
+      <div id="jobs-list" aria-live="polite">
+        <div class="job-row skeleton-row">
+          <div class="skeleton skeleton-thumb"></div>
+          <div class="skeleton-text-group">
+            <div class="skeleton skeleton-line w-60"></div>
+            <div class="skeleton skeleton-line w-30"></div>
+          </div>
+        </div>
+        <div class="job-row skeleton-row">
+          <div class="skeleton skeleton-thumb"></div>
+          <div class="skeleton-text-group">
+            <div class="skeleton skeleton-line w-60"></div>
+            <div class="skeleton skeleton-line w-30"></div>
+          </div>
+        </div>
+      </div>
 
       <div class="danger-zone">
         <button class="btn btn-secondary" id="delete-account-btn">Delete account</button>
@@ -156,6 +174,14 @@ async function loadJobs() {
   }
 }
 
+const STATUS_LABELS = {
+  complete: "Complete",
+  running: "Running",
+  submitted: "Submitted",
+  error: "Error",
+  quality_failed: "Needs retry",
+};
+
 function renderJobRow(job) {
   const thumb = job.preview_url
     ? `<img src="${job.preview_url}" alt="Preview of ${escapeHtml(job.prompt)}">`
@@ -163,12 +189,16 @@ function renderJobRow(job) {
   const downloadBtn = job.download_url
     ? `<a href="${job.download_url}" class="btn btn-secondary">Download</a>`
     : "";
+  const statusLabel = STATUS_LABELS[job.status] || job.status;
   return `
     <div class="job-row">
       ${thumb}
       <div class="job-info">
         <p class="job-prompt">${escapeHtml(job.prompt)}</p>
-        <p class="job-meta">${job.status} · expires ${new Date(job.expires_at).toLocaleDateString()}</p>
+        <p class="job-meta">
+          <span class="status-pill status-pill-${job.status}">${statusLabel}</span>
+          · expires ${new Date(job.expires_at).toLocaleDateString()}
+        </p>
       </div>
       <div class="job-actions">
         ${downloadBtn}

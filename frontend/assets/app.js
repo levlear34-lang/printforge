@@ -151,3 +151,46 @@ function initScrollReveal() {
 }
 
 initScrollReveal();
+
+// Accessible radio-group behavior for the .tier-option "card" pattern
+// (quality tier / generation mode choices on /create). These render as
+// styled divs, not native <input type="radio">, so without this they're
+// mouse-only -- unreachable by keyboard and invisible to screen readers.
+// Implements the standard ARIA radiogroup pattern: role="radio" +
+// aria-checked on each option (set in HTML), roving tabindex (only the
+// checked option is in the Tab order; arrow keys move within the group),
+// and Enter/Space activation to match native <input type="radio">.
+function initRadioGroup(container, onSelect) {
+  const options = Array.from(container.querySelectorAll('[role="radio"]'));
+  if (!options.length) return;
+
+  function select(option) {
+    options.forEach((o) => {
+      const isSelected = o === option;
+      o.classList.toggle("selected", isSelected);
+      o.setAttribute("aria-checked", String(isSelected));
+      o.tabIndex = isSelected ? 0 : -1;
+    });
+    onSelect(option);
+  }
+
+  options.forEach((option, index) => {
+    option.addEventListener("click", () => select(option));
+    option.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        select(option);
+        return;
+      }
+      const isNext = event.key === "ArrowRight" || event.key === "ArrowDown";
+      const isPrev = event.key === "ArrowLeft" || event.key === "ArrowUp";
+      if (!isNext && !isPrev) return;
+      event.preventDefault();
+      const nextIndex = isNext
+        ? (index + 1) % options.length
+        : (index - 1 + options.length) % options.length;
+      options[nextIndex].focus();
+      select(options[nextIndex]);
+    });
+  });
+}

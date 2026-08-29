@@ -32,13 +32,13 @@
           </div>
 
           <div class="field" id="mode-field" style="display:none">
-            <label>Generation mode</label>
-            <div class="tier-options">
-              <div class="tier-option selected" data-mode="quick">
+            <label id="mode-label">Generation mode</label>
+            <div class="tier-options" role="radiogroup" aria-labelledby="mode-label">
+              <div class="tier-option selected" data-mode="quick" role="radio" aria-checked="true" tabindex="0">
                 <h4>Quick (default)</h4>
                 <p>Generate directly from your description above.</p>
               </div>
-              <div class="tier-option" data-mode="advanced">
+              <div class="tier-option" data-mode="advanced" role="radio" aria-checked="false" tabindex="-1">
                 <h4>Advanced: AI-refined prompt</h4>
                 <p>An AI expands your idea into a more detailed prompt first, with a preview step and as many rounds as you want to adjust it. Slower -- each round is its own free Kaggle job (a few minutes) and uses a bit more of your weekly GPU-hour quota.</p>
               </div>
@@ -79,13 +79,13 @@
           </div>
 
           <div class="field" id="tier-field" style="display:none">
-            <label>Quality tier</label>
-            <div class="tier-options">
-              <div class="tier-option selected" data-tier="fast">
+            <label id="tier-label">Quality tier</label>
+            <div class="tier-options" role="radiogroup" aria-labelledby="tier-label">
+              <div class="tier-option selected" data-tier="fast" role="radio" aria-checked="true" tabindex="0">
                 <h4>Fast (default)</h4>
                 <p>Quicker generation, uses less of your weekly Kaggle GPU quota.</p>
               </div>
-              <div class="tier-option" data-tier="refined">
+              <div class="tier-option" data-tier="refined" role="radio" aria-checked="false" tabindex="-1">
                 <h4>Refined</h4>
                 <p>Higher quality, takes noticeably longer and uses more GPU quota per run.</p>
               </div>
@@ -139,7 +139,7 @@
 const form = document.getElementById("create-form");
 const promptField = document.getElementById("prompt");
 const tierField = document.getElementById("tier-field");
-const tierOptions = document.querySelectorAll(".tier-option[data-tier]");
+const tierOptionsContainer = document.querySelector("#tier-field .tier-options");
 const bannerSlot = document.getElementById("banner-slot");
 const classificationHint = document.getElementById("classification-hint");
 const submitBtn = document.getElementById("submit-btn");
@@ -150,7 +150,7 @@ const tokenInput = document.getElementById("token");
 const useDifferentToken = document.getElementById("use-different-token");
 
 const modeField = document.getElementById("mode-field");
-const modeOptions = document.querySelectorAll(".tier-option[data-mode]");
+const modeOptionsContainer = document.querySelector("#mode-field .tier-options");
 const advancedPanel = document.getElementById("advanced-panel");
 const refineHistoryEl = document.getElementById("refine-history");
 const refineStatusField = document.getElementById("refine-status-field");
@@ -195,12 +195,8 @@ useDifferentToken.addEventListener("change", () => {
   tokenInput.required = wantsDifferent;
 });
 
-tierOptions.forEach((el) => {
-  el.addEventListener("click", () => {
-    tierOptions.forEach((o) => o.classList.remove("selected"));
-    el.classList.add("selected");
-    selectedTier = el.dataset.tier;
-  });
+initRadioGroup(tierOptionsContainer, (option) => {
+  selectedTier = option.dataset.tier;
 });
 
 function showBanner(kind, message) {
@@ -238,19 +234,15 @@ promptField.addEventListener("input", () => {
   }, 400);
 });
 
-modeOptions.forEach((el) => {
-  el.addEventListener("click", () => {
-    modeOptions.forEach((o) => o.classList.remove("selected"));
-    el.classList.add("selected");
-    selectedMode = el.dataset.mode;
-    if (selectedMode === "advanced") {
-      advancedPanel.style.display = "block";
-      setSubmitVisible(!!currentRefinedPrompt);
-    } else {
-      advancedPanel.style.display = "none";
-      setSubmitVisible(true);
-    }
-  });
+initRadioGroup(modeOptionsContainer, (option) => {
+  selectedMode = option.dataset.mode;
+  if (selectedMode === "advanced") {
+    advancedPanel.style.display = "block";
+    setSubmitVisible(!!currentRefinedPrompt);
+  } else {
+    advancedPanel.style.display = "none";
+    setSubmitVisible(true);
+  }
 });
 
 function setSubmitVisible(visible) {
@@ -271,8 +263,10 @@ function renderRefinementHistory() {
   }
   refineHistoryEl.innerHTML = refinementRounds.map((round, i) => `
     <div class="banner banner-info" style="text-align:left">
-      <strong>Round ${i + 1}${round.feedback ? ` — requested: "${escapeHtml(round.feedback)}"` : " — initial expansion"}</strong>
-      <div style="margin-top:6px">${escapeHtml(round.output)}</div>
+      <div>
+        <strong>Round ${i + 1}${round.feedback ? ` — requested: "${escapeHtml(round.feedback)}"` : " — initial expansion"}</strong>
+        <div style="margin-top:6px">${escapeHtml(round.output)}</div>
+      </div>
     </div>
   `).join("");
 }
