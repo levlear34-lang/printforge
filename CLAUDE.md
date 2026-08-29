@@ -197,17 +197,16 @@ final polish pass, and creative-tier (fast/refined) generation (deferred
 since Milestone 2, built and verified live this milestone). See Progress
 Log for the full story on each.
 
-## Current milestone: none — Milestone 8 complete
-Both ordered pieces of work are done: (1) a visual/UX design pass using
-newly-installed design-skill tooling, verified against a local dev
-server; (2) the opt-in "Advanced" prompt-refinement step for creative
-requests, verified end to end on the live site with real Kaggle calls
-(two refinement rounds with feedback, approval, and a real fast-tier
-generation all the way to a downloadable STL), plus a live regression
-check that Quick mode is unaffected. See "Milestone 8 — AI-refined-prompt
-feature" below for the full spec and the Progress Log for what was
-actually built and verified. Nothing further is planned without
-additional direction.
+## Current milestone: none — Milestone 8 + full visual redesign complete
+Milestone 8 (AI-refined-prompt feature) is done -- see that section below.
+On top of it, a full visual redesign replaced the original dark/orange
+theme with a warm neutral palette (cream/beige base, terracotta primary
+accent, sage secondary accent), a real type/spacing scale, skeleton
+loaders, and accessibility fixes (keyboard-operable selection cards,
+ARIA live regions, verified contrast ratios). See "Visual redesign" in
+the Progress Log for the full story, including how real Playwright
+screenshots were finally made to work in this environment. Nothing
+further is planned without additional direction.
 
 ## Milestone plan
 1. Project scaffolding: repo structure, stack choice, vendor reused modules,
@@ -1421,3 +1420,147 @@ what's next.)
   and the AI-refined-prompt feature (all 5 of its sub-milestones) are
   done, tested, and verified live. Nothing further is planned without
   additional direction.
+
+- 2026-08-28/30: Visual redesign -- scrapped the dark/orange theme
+  entirely per direct instruction ("the current design isn't landing
+  well... a genuine visual redesign, not just incremental polish").
+
+  Step 1, a hard prerequisite before any design work: fixed real
+  screenshot verification. This session's built-in Browser pane tools
+  cannot composite frames at all (confirmed across two separate
+  sessions -- not a fluke), so a genuinely different approach was
+  needed, not another workaround. Installed Playwright directly (`npm
+  install playwright` + `npx playwright install chromium`) and drove it
+  from a plain Node script. Playwright's own bundled Chromium build
+  fails to launch on this machine specifically (`spawn UNKNOWN` via
+  Node, `side-by-side configuration is incorrect` via PowerShell) --
+  diagnosed as a real, local Windows problem, not a sandboxing artifact:
+  the registry claims VC++ Redistributable 14.50.35719.00 is installed,
+  but vcruntime140.dll/msvcp140.dll are missing from System32. Rather
+  than repair system files (a system-modifying action requiring the
+  developer's own action), pointed Playwright at the system's existing
+  Edge install instead (`channel: 'msedge'`), which launched cleanly.
+  Proved this was real, not assumed: first screenshot genuinely
+  displayed Render's cold-start loading splash (the live site's free
+  tier was asleep), and a second attempt after the app woke up showed
+  the actual rendered landing page -- concrete, visually-verified proof
+  the pipeline captures real pixels, exactly what the developer asked to
+  confirm before any redesign work began.
+
+  Built a reusable capture script mocking backend routes (`page.route()`
+  for /api/me, /api/classify, /api/refine, /api/jobs/*, /api/dashboard/
+  jobs) so every page state -- landing, create empty/Quick-revealed/
+  Advanced-with-history, job status, result, dashboard with job history,
+  FAQ -- could be captured deterministically against a local dev server,
+  without needing a real Kaggle token in the loop. Captured a full
+  before-state baseline and published it as a gallery artifact so the
+  developer could see the actual current state, not a description of it,
+  before any change was made.
+
+  Real bug found via this process, not assumed: the first "before"
+  capture of the landing page showed the "A real example" section
+  completely blank. Root cause was the earlier design pass's own
+  scroll-reveal (see the design-pass entry above) racing against
+  Playwright's screenshot timing -- not a real user-facing bug (real
+  users get the 1.5s JS fallback), but proof the mechanism was fragile
+  enough to warrant a longer safety margin in the capture script
+  (400ms -> 1800ms wait) rather than trusting the first render.
+
+  Color direction (developer-specified, applied deliberately rather than
+  retrofitted): warm neutral palette -- cream/beige base (#faf6f0 bg,
+  #f1e9dd card surface), warm espresso text (#2a2420, not pure black),
+  terracotta primary accent (#b5502f), sage secondary accent (#5f6e52)
+  for variety/tags/secondary emphasis. Every text/background/button pair
+  was checked against WCAG AA (4.5:1 normal text, 3:1 large text/UI)
+  with an actual relative-luminance calculation, not eyeballed -- the
+  initial candidate terracotta/sage values were adjusted (darkened)
+  after the first round of checks came back under 4.5:1 for white
+  button text; the final palette clears every pairing with real margin
+  (5.06:1 white-on-terracotta, 5.47:1 white-on-sage, 4.70:1 terracotta-
+  on-background text, etc.) Warning-on-background text was found to only
+  hit 3.00:1 (large-text-only), so warning banners keep the existing
+  tinted-background + dark-text pattern rather than using the warning
+  hue as small text color anywhere.
+
+  Rebuilt style.css's tokens from scratch: added a real type scale
+  (Fraunces serif for editorial moments -- hero h1, section h2 -- paired
+  with Work Sans for everything else, a deliberate pairing since
+  PrintForge is about a warm, tactile, crafted physical-object product,
+  not a cold SaaS tool) and a 4px-based spacing scale (--space-1 through
+  --space-24), replacing scattered arbitrary pixel values. Nav's own CTA
+  was deliberately downgraded in visual weight (the hero already has the
+  real primary CTA directly below it -- two identical terracotta buttons
+  stacked in one view were competing, not guiding, in the old design).
+  Step-number circles changed from solid terracotta fills to outlined
+  rings with terracotta text -- one of several deliberate reductions in
+  how often the accent color repeats per view, per the "one accent
+  moment" principle.
+
+  Accessibility fixes that were real gaps, not just polish: the tier/
+  mode selection cards were plain `<div>`s with onclick handlers --
+  completely unreachable by keyboard, invisible to screen readers as
+  anything other than static text. Rebuilt as a proper ARIA radiogroup
+  pattern (role="radiogroup"/"radio", aria-checked, roving tabindex,
+  arrow-key navigation matching native `<input type="radio">` behavior)
+  via a new reusable `initRadioGroup()` helper in app.js, used by both
+  the quality-tier and generation-mode groups on /create. Verified via
+  Playwright driving real keyboard events (not just reading the code):
+  focusing the Quick option and pressing ArrowRight correctly moved
+  focus AND selection to Advanced, updated aria-checked/tabindex on both
+  options, and triggered the same panel-visibility logic a mouse click
+  would. Selected-state affordance also upgraded from a subtle border-
+  color-only change (a11y risk: color alone) to a filled checkmark
+  circle, so selection is visible via shape, not just color.
+
+  Skeleton loaders replaced bare spinners/blank states per explicit
+  requirement: job.html's status card now shows a shimmering placeholder
+  preview-image block + text lines (hinting at the eventual result
+  layout) instead of a spinner floating in empty space; dashboard.html
+  shows shimmering placeholder job rows instead of a plain "Loading…"
+  string while /api/dashboard/jobs is in flight. Both respect
+  prefers-reduced-motion (static tinted block, no shimmer animation).
+  Added a semantic `.status-pill` component (colored dot + text label,
+  never color alone) for job status on the dashboard.
+
+  Real bug caught by the after-screenshots, not just code review: the
+  refinement-history banner on /create rendered with a cramped, wrapped
+  3-line label sitting oddly next to the body text. Root cause: `.banner`
+  is `display:flex`, and the history markup had `<strong>` and the
+  content `<div>` as direct siblings inside it -- meaning they became
+  two separate flex items instead of one grouped block. Fixed by
+  wrapping both in a single container div; re-screenshotted and
+  confirmed the fix (cropped before/after comparison of just that
+  region, not just "looks fine at a glance").
+
+  Separately flagged by the developer: a real production 429 from
+  Kaggle's API during job-status polling. Root cause: jobs.py's
+  `should_recheck()` gated real Kaggle status calls to a flat 10 seconds
+  for a job's *entire* run, which for the multi-minute generation jobs
+  this project already knows are normal (see Milestone 8's own timing
+  notes) adds up to many dozens of calls over a single job's lifetime --
+  apparently enough to trip a rate limit on Kaggle's side. Fixed with
+  exponential backoff: `should_recheck()` now grows the required
+  interval 1.5x per check (10s -> 15s -> 22.5s ...) capped at 60s,
+  tracked via a new per-job `check_count` field and a `record_check()`
+  helper (replacing the old inline `last_checked_at` update) shared by
+  both generation.py and refinement.py so the fix applies uniformly to
+  3D-generation jobs and refinement rounds alike. Confirmed the frontend
+  polling interval (job.html's 6s setTimeout loop) was never actually
+  the cause -- it only controls how often the browser asks *our*
+  backend, not how often our backend calls Kaggle; should_recheck()
+  already gated that independently of frontend poll frequency, so no
+  frontend change was needed, just the backend gate. 6 new tests in
+  test_jobs.py cover the fresh-job/post-check/growing-interval/capped-
+  at-max/unknown-job cases. 131/131 tests passing project-wide.
+
+  Verified mobile responsiveness (390px viewport, real Playwright
+  screenshots) and keyboard-only focus states (real Tab-key screenshots
+  showing the terracotta focus ring on nav links) -- both held up
+  without further changes needed.
+
+  Committed in three pieces per the developer's "small commits" working
+  style: (1) the design-token/type-scale/spacing-scale rewrite in
+  style.css, (2) applying the new system across every page plus the
+  accessible radio-group and skeleton loaders, (3) the Kaggle-polling
+  backoff fix, kept separate since it's backend logic unrelated to the
+  visual work. Next: none planned -- awaiting further direction.

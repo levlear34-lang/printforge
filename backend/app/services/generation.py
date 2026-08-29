@@ -6,7 +6,6 @@ accounts.record_job_start/record_job_update.
 import json
 import os
 import tempfile
-import time
 
 from app.vendored.request_classifier import classify_request
 from app.vendored.request_parser import parse_request
@@ -108,7 +107,7 @@ def check_job(job_id):
     if not jobs.should_recheck(job_id):
         return jobs.public_view(job)
 
-    jobs.update_job(job_id, last_checked_at=time.time())
+    jobs.record_check(job_id)
 
     try:
         status_text = kaggle_client.get_status(job["token"], job["kernel_id"])

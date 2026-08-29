@@ -27,7 +27,19 @@ import uuid
 _LOCK = threading.Lock()
 _JOBS = {}
 
-MIN_RECHECK_INTERVAL_SECONDS = 10
+# Exponential backoff on real Kaggle status checks: starts at 10s, grows
+# 1.5x per consecutive check, caps at 60s. A real production 429 from
+# Kaggle's API during status polling showed a flat 10s interval for a
+# job's entire (often several-minutes-long) run is too aggressive --
+# fine early on when a visitor is actively watching, wasteful and
+# rate-limit-risky once a job has been running for a while. Frontend
+# poll frequency (job.html's setTimeout loop) is irrelevant to this --
+# it only controls how often the browser asks *our* backend for status;
+# should_recheck() is what actually gates a real call to Kaggle,
+# regardless of how often the frontend asks.
+BASE_RECHECK_INTERVAL_SECONDS = 10
+MAX_RECHECK_INTERVAL_SECONDS = 60
+RECHECK_BACKOFF_MULTIPLIER = 1.5
 TERMINAL_STATUSES = ("complete", "error", "quality_failed")
 
 
@@ -47,6 +59,7 @@ def create_job(prompt, classification, tier, token, kaggle_username, kernel_id, 
             "status": "submitted",
             "created_at": time.time(),
             "last_checked_at": 0.0,
+            "check_count": 0,
             "result": None,
             "error": None,
         }
@@ -99,7 +112,22 @@ def should_recheck(job_id):
         job = _JOBS.get(job_id)
         if not job:
             return False
-        return (time.time() - job["last_checked_at"]) >= MIN_RECHECK_INTERVAL_SECONDS
+        interval = min(
+            MAX_RECHECK_INTERVAL_SECONDS,
+            BASE_RECHECK_INTERVAL_SECONDS * (RECHECK_BACKOFF_MULTIPLIER ** job["check_count"]),
+        )
+        return (time.time() - job["last_checked_at"]) >= interval
+
+
+def record_check(job_id):
+    """Call exactly once per real Kaggle status check (not per frontend
+    poll) -- advances the backoff in should_recheck() above.
+    """
+    with _LOCK:
+        if job_id in _JOBS:
+            job = _JOBS[job_id]
+            job["last_checked_at"] = time.time()
+            job["check_count"] += 1
 
 
 def public_view(job):

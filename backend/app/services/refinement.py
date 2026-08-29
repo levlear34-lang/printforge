@@ -27,7 +27,6 @@ Two deliberate differences from generation.py's 3D-generation jobs:
 import json
 import os
 import tempfile
-import time
 
 from app.services import content_filter, jobs, kaggle_client, kernel_builder
 
@@ -105,7 +104,7 @@ def check_refinement(job_id):
     if not jobs.should_recheck(job_id):
         return jobs.public_view(job)
 
-    jobs.update_job(job_id, last_checked_at=time.time())
+    jobs.record_check(job_id)
 
     try:
         status_text = kaggle_client.get_status(job["token"], job["kernel_id"])
