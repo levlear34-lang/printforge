@@ -1,4 +1,4 @@
-// Shared helpers for the PrintForge frontend. No framework/build step --
+// Shared helpers for the Objexa frontend. No framework/build step --
 // small static site, so plain fetch() calls against the FastAPI backend
 // that serves these same pages (same origin, no CORS complications).
 
@@ -51,7 +51,7 @@ async function initAuthNav(slotId) {
 // public in every page's source once real -- so just swap this one
 // constant, no other code changes needed).
 const GA_MEASUREMENT_ID = "G-XXXXXXXXXX";
-const COOKIE_CONSENT_KEY = "pf_cookie_consent";
+const COOKIE_CONSENT_KEY = "objexa_cookie_consent";
 
 function loadGoogleAnalytics() {
   if (GA_MEASUREMENT_ID.includes("XXXX")) return; // still a placeholder -- don't load a broken tag

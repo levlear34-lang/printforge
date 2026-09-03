@@ -56,7 +56,7 @@ def job_download(job_id: str, user_id: int = Depends(require_user_id)):
     job = db.get_job_history(job_id, user_id)
     if job is None or not job["stl_path"] or not os.path.exists(job["stl_path"]):
         raise HTTPException(status_code=404, detail="This file has expired or doesn't exist.")
-    return FileResponse(job["stl_path"], media_type="model/stl", filename=f"printforge-{job_id}.stl")
+    return FileResponse(job["stl_path"], media_type="model/stl", filename=f"objexa-{job_id}.stl")
 
 
 @router.post("/account/token")

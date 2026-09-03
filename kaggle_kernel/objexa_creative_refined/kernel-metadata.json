@@ -1,6 +1,6 @@
 {
-  "id": "PLACEHOLDER_USERNAME/printforge-PLACEHOLDER_JOB_ID",
-  "title": "printforge-PLACEHOLDER_JOB_ID",
+  "id": "PLACEHOLDER_USERNAME/objexa-PLACEHOLDER_JOB_ID",
+  "title": "objexa-PLACEHOLDER_JOB_ID",
   "code_file": "run.py",
   "language": "python",
   "kernel_type": "script",

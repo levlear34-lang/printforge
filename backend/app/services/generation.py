@@ -12,7 +12,7 @@ from app.vendored.request_parser import parse_request
 from app.vendored.design_agent import design_alternatives
 from app.services import accounts, content_filter, jobs, kaggle_client, kernel_builder, rate_limit
 
-GENERATED_ROOT = os.path.join(tempfile.gettempdir(), "printforge_generated")
+GENERATED_ROOT = os.path.join(tempfile.gettempdir(), "objexa_generated")
 
 
 class GenerationError(Exception):

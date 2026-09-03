@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: printforge-api
+    name: objexa-api
     runtime: python
     plan: free
     rootDir: backend

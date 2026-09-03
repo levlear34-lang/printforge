@@ -9,7 +9,7 @@ def test_build_kernel_parametric_injects_spec():
         with open(f"{kernel_dir}/run.py", encoding="utf-8") as f:
             content = f.read()
         assert '"model_type": "stand"' in content
-        assert kernel_id == "testuser/printforge-abc123"
+        assert kernel_id == "testuser/objexa-abc123"
     finally:
         kernel_builder.cleanup(kernel_dir)
 

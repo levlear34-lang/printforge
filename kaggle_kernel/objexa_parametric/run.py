@@ -1,4 +1,4 @@
-"""PrintForge parametric-generation Kaggle kernel.
+"""Objexa parametric-generation Kaggle kernel.
 
 Pushed fresh under each visitor's own Kaggle account for each job (see
 backend/app/services/kernel_builder.py, which rewrites SPEC_JSON and

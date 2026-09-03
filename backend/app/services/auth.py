@@ -13,7 +13,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.config import settings
 
-SESSION_COOKIE_NAME = "printforge_session"
+SESSION_COOKIE_NAME = "objexa_session"
 SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60  # 30 days
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -46,7 +46,7 @@ def verify_password(password, password_hash):
 def _serializer():
     if not settings.session_secret:
         raise AuthError("SESSION_SECRET is not configured on the server.", status_code=500)
-    return URLSafeTimedSerializer(settings.session_secret, salt="printforge-session")
+    return URLSafeTimedSerializer(settings.session_secret, salt="objexa-session")
 
 
 def create_session_token(user_id):

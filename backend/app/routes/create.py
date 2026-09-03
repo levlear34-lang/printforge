@@ -95,4 +95,4 @@ def download(job_id: str):
     stl_path = job["result"]["stl_path"]
     if not os.path.exists(stl_path):
         raise HTTPException(status_code=410, detail="This file has expired.")
-    return FileResponse(stl_path, media_type="model/stl", filename=f"printforge-{job_id}.stl")
+    return FileResponse(stl_path, media_type="model/stl", filename=f"objexa-{job_id}.stl")

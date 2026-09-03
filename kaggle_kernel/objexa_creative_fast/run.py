@@ -1,27 +1,25 @@
-"""PrintForge creative "refined" tier Kaggle kernel (Stable Diffusion -> TripoSR).
+"""Objexa creative "fast" tier Kaggle kernel (Shap-E text-to-3D).
 
 Pushed fresh under each visitor's own Kaggle account for each job (see
 backend/app/services/kernel_builder.py, which rewrites PROMPT and
 kernel-metadata.json's id/title before every push -- this file in the repo
 is the template/source of truth).
 
-Ported from AI_3D_FACTORY's
-kaggle_kernel/sd_triposr_generator/generate_mesh_refined.py (the SD->TripoSR
-generation itself, verbatim -- same transformers-pin workaround, same model
-choices) plus app/modules/mesh_quality.py (the raw-mesh sanity check) plus
+Ported from AI_3D_FACTORY's kaggle_kernel/shape_generator/generate_mesh.py
+(the Shap-E generation itself, verbatim -- same --no-deps install
+workaround, same sampling params) plus app/modules/mesh_quality.py (the
+raw-mesh sanity check, verbatim) plus
 app/controllers/blender/process_creative_mesh.py (the print-readiness
-stage, ported to a downloaded portable Blender the same way
-printforge_creative_fast/run.py and printforge_parametric/run.py already
-do). This file is deliberately a separate kernel/slot from
-printforge_creative_fast/ -- the fast tier must keep working unmodified
-regardless of what happens here, same discipline AI_3D_FACTORY's own two
-kernels followed.
+stage, ported the same way objexa_parametric/run.py ported
+generate_model.py -- downloaded portable Blender instead of a local
+install, since a public site can't assume Blender is installed and this
+kernel has no local Blender to shell out to either).
 
-The print-readiness INNER_SCRIPT/mesh-quality-check code below is
-duplicated from printforge_creative_fast/run.py rather than shared, since
-Kaggle "script" kernels are pushed as a single self-contained file with no
-sibling-module imports -- the same constraint that already applies to
-printforge_parametric/run.py. Keep both in sync if that logic changes.
+Two fixes applied here that AI_3D_FACTORY's original code didn't need,
+both already proven in objexa_parametric/run.py: `bpy.ops.wm.stl_export`
+instead of `export_mesh.stl` (removed in the Blender 5.2.1 Linux build
+Kaggle downloads), and CYCLES/CPU instead of BLENDER_EEVEE for the preview
+render (headless-safe, no GL context needed).
 """
 import json
 import os
@@ -39,15 +37,8 @@ BLENDER_URL = (
 TARBALL = os.path.join(WORKDIR, "blender.tar.xz")
 EXTRACT_DIR = os.path.join(WORKDIR, "blender_extracted")
 
-TRIPOSR_DIR = os.path.join(WORKDIR, "TripoSR")
-
 # Rewritten by kernel_builder.py before each push.
-PROMPT = "a spooky haunted castle"
-
-SD_MODEL = "CompVis/stable-diffusion-v1-4"
-TRIPOSR_MODEL = "stabilityai/TripoSR"
-MC_RESOLUTION = 256
-FOREGROUND_RATIO = 0.85
+PROMPT = "a majestic phoenix statue"
 
 TARGET_SIZE_MM = 80.0
 MIN_WALL_MM = 1.5
@@ -64,68 +55,50 @@ def _pip(*args):
 
 
 def generate_mesh():
-    if not os.path.exists(TRIPOSR_DIR):
-        subprocess.run(
-            ["git", "clone", "--depth", "1", "https://github.com/VAST-AI-Research/TripoSR.git", TRIPOSR_DIR],
-            check=True,
-        )
-    requirements_path = f"{TRIPOSR_DIR}/requirements.txt"
-    with open(requirements_path) as f:
-        lines = [line for line in f if not line.strip().lower().startswith("transformers")]
-    filtered_requirements_path = os.path.join(WORKDIR, "triposr_requirements_filtered.txt")
-    with open(filtered_requirements_path, "w") as f:
-        f.writelines(lines)
+    # Shap-E and CLIP both unpin "torch" in their own setup files, so a
+    # normal `pip install` would replace Kaggle's GPU-matched PyTorch with
+    # the latest PyPI wheel -- which has dropped support for Kaggle's older
+    # P100 GPUs (compute capability sm_60), breaking CUDA entirely. Install
+    # both with --no-deps so the preinstalled torch is left alone, then add
+    # back only the small pure-Python extras they actually need.
+    _pip("--no-deps", "git+https://github.com/openai/CLIP.git")
+    _pip("--no-deps", "git+https://github.com/openai/shap-e.git")
+    _pip("filelock", "fire", "humanize", "blobfile", "ftfy", "packaging", "regex")
 
-    _pip(
-        "-r", filtered_requirements_path,
-        "diffusers", "transformers", "accelerate", "safetensors", "onnxruntime",
-    )
-
-    sys.path.insert(0, TRIPOSR_DIR)
-
-    import numpy as np
-    import rembg
     import torch
-    from diffusers import StableDiffusionPipeline
-    from PIL import Image
-    from tsr.system import TSR
-    from tsr.utils import remove_background, resize_foreground
+    from shap_e.diffusion.gaussian_diffusion import diffusion_from_config
+    from shap_e.diffusion.sample import sample_latents
+    from shap_e.models.download import load_config, load_model
+    from shap_e.util.notebooks import decode_latent_mesh
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     print(f"Prompt: {PROMPT}")
 
-    print("Generating concept image with Stable Diffusion...")
-    pipe = StableDiffusionPipeline.from_pretrained(
-        SD_MODEL, torch_dtype=torch.float16 if device == "cuda" else torch.float32
+    xm = load_model("transmitter", device=device)
+    model = load_model("text300M", device=device)
+    diffusion = diffusion_from_config(load_config("diffusion"))
+
+    latents = sample_latents(
+        batch_size=1,
+        model=model,
+        diffusion=diffusion,
+        guidance_scale=15.0,
+        model_kwargs=dict(texts=[PROMPT]),
+        progress=True,
+        clip_denoised=True,
+        use_fp16=(device.type == "cuda"),
+        use_karras=True,
+        karras_steps=64,
+        sigma_min=1e-3,
+        sigma_max=160,
+        s_churn=0,
     )
-    pipe = pipe.to(device)
-    full_prompt = f"{PROMPT}, 3d asset, product photo, single object, centered, plain background"
-    negative_prompt = "multiple objects, cropped, blurry, text, watermark, collage"
-    image = pipe(full_prompt, negative_prompt=negative_prompt, num_inference_steps=30).images[0]
-    del pipe
-    if device == "cuda":
-        torch.cuda.empty_cache()
-    image.save(os.path.join(WORKDIR, "concept.png"))
 
-    print("Reconstructing mesh with TripoSR...")
-    model = TSR.from_pretrained(TRIPOSR_MODEL, config_name="config.yaml", weight_name="model.ckpt")
-    model.renderer.set_chunk_size(8192)
-    model.to(device)
-
-    rembg_session = rembg.new_session()
-    clean_image = remove_background(image, rembg_session)
-    clean_image = resize_foreground(clean_image, FOREGROUND_RATIO)
-    clean_image = np.array(clean_image).astype(np.float32) / 255.0
-    clean_image = clean_image[:, :, :3] * clean_image[:, :, 3:4] + (1 - clean_image[:, :, 3:4]) * 0.5
-    clean_image = Image.fromarray((clean_image * 255.0).astype(np.uint8))
-
-    with torch.no_grad():
-        scene_codes = model([clean_image], device=device)
-    meshes = model.extract_mesh(scene_codes, True, resolution=MC_RESOLUTION)
-
+    mesh = decode_latent_mesh(xm, latents[0]).tri_mesh()
     obj_path = os.path.join(WORKDIR, "mesh.obj")
-    meshes[0].export(obj_path)
+    with open(obj_path, "w") as f:
+        mesh.write_obj(f)
     print("Wrote", obj_path)
     return obj_path
 
@@ -437,9 +410,7 @@ def run_print_readiness(obj_path):
 def cleanup():
     for path in (TARBALL, EXTRACT_DIR, os.path.join(WORKDIR, "inner_process.py"),
                  os.path.join(WORKDIR, "creative_request.json"),
-                 os.path.join(WORKDIR, "mesh.obj"), TRIPOSR_DIR,
-                 os.path.join(WORKDIR, "concept.png"),
-                 os.path.join(WORKDIR, "triposr_requirements_filtered.txt")):
+                 os.path.join(WORKDIR, "mesh.obj")):
         if os.path.isdir(path):
             shutil.rmtree(path, ignore_errors=True)
         elif os.path.exists(path):

@@ -30,7 +30,7 @@ import tempfile
 
 from app.services import content_filter, jobs, kaggle_client, kernel_builder
 
-REFINEMENTS_ROOT = os.path.join(tempfile.gettempdir(), "printforge_refinements")
+REFINEMENTS_ROOT = os.path.join(tempfile.gettempdir(), "objexa_refinements")
 
 
 class RefinementError(Exception):

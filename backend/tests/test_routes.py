@@ -19,7 +19,7 @@ def _clear_jobs():
 
 def test_create_returns_job_id():
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-x"):
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-x"):
         response = client.post(
             "/api/create",
             json={"text": "phone stand, 2 slots, 18 degrees", "kaggle_token": "tok"},

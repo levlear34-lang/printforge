@@ -1,4 +1,4 @@
-"""PrintForge backend entry point (FastAPI).
+"""Objexa backend entry point (FastAPI).
 
 Serves both the JSON API and the static frontend from one process/one
 Render service -- simplest possible deploy for a small site, no second
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="PrintForge API", lifespan=lifespan)
+app = FastAPI(title="Objexa API", lifespan=lifespan)
 app.include_router(create_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
@@ -181,7 +181,7 @@ async def not_found(request: Request, exc: HTTPException):
 
 @app.get("/api/status")
 def api_status():
-    return {"service": "PrintForge", "status": "ok"}
+    return {"service": "Objexa", "status": "ok"}
 
 
 @app.get("/health")

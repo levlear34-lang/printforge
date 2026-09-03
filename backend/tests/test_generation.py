@@ -50,7 +50,7 @@ def test_submit_request_creative_without_tier_asks_for_one():
 
 def test_submit_request_creative_pushes_correct_tier_kernel():
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-xyz") as mock_push:
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-xyz") as mock_push:
         job_id = generation.submit_request("Batman themed phone holder", "fake-token", tier="fast")
 
     job = jobs.get_job(job_id)
@@ -65,7 +65,7 @@ def test_submit_request_creative_pushes_correct_tier_kernel():
 
 def test_submit_request_refined_tier_also_wired():
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-xyz"):
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-xyz"):
         job_id = generation.submit_request("Batman themed phone holder", "fake-token", tier="refined")
 
     assert jobs.get_job(job_id)["tier"] == "refined"
@@ -73,7 +73,7 @@ def test_submit_request_refined_tier_also_wired():
 
 def test_submit_request_parametric_pushes_kernel_and_creates_job(tmp_path):
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-abc123") as mock_push:
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-abc123") as mock_push:
         job_id = generation.submit_request(
             "phone stand, 2 slots, 18 degrees, 4mm walls, 3mm clearance, 70x12x150mm items",
             "fake-token",
@@ -84,7 +84,7 @@ def test_submit_request_parametric_pushes_kernel_and_creates_job(tmp_path):
     assert job["status"] == "running"
     assert job["classification"] == "parametric"
     assert job["kaggle_username"] == "testuser"
-    assert job["kernel_id"] == "testuser/printforge-abc123"
+    assert job["kernel_id"] == "testuser/objexa-abc123"
     assert job["spec"]["model_type"] == "stand"
     mock_push.assert_called_once()
 

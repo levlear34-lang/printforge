@@ -21,7 +21,7 @@ def _clear_jobs():
 
 def test_refine_returns_job_id():
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-x"):
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-x"):
         response = client.post(
             "/api/refine",
             json={"idea": "a batman phone holder", "kaggle_token": "tok"},
@@ -37,7 +37,7 @@ def test_refine_missing_token_returns_422():
 
 def test_refine_round_two_accepts_feedback():
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-x") as mock_push:
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-x") as mock_push:
         response = client.post(
             "/api/refine",
             json={

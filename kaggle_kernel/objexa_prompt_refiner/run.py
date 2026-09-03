@@ -1,4 +1,4 @@
-"""PrintForge "Advanced" pre-processing kernel: expands a vague creative idea
+"""Objexa "Advanced" pre-processing kernel: expands a vague creative idea
 (or applies a requested change to a previous round's output) into a single,
 detailed, generation-ready prompt for the existing fast/refined 3D kernels.
 

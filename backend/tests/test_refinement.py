@@ -58,7 +58,7 @@ def test_submit_refinement_does_not_apply_daily_cap():
         jobs.update_job(job_id, status="complete")
 
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-xyz"):
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-xyz"):
         job_id = refinement.submit_refinement("a batman phone holder", token="fake-token", ip="9.9.9.9")
 
     assert jobs.get_job(job_id)["status"] == "running"
@@ -73,7 +73,7 @@ def test_submit_refinement_still_blocks_concurrent_active_job():
 
 def test_submit_refinement_pushes_cpu_only_kernel():
     with patch.object(kaggle_client, "resolve_username", return_value="testuser"), \
-         patch.object(kaggle_client, "push_kernel", return_value="testuser/printforge-xyz") as mock_push:
+         patch.object(kaggle_client, "push_kernel", return_value="testuser/objexa-xyz") as mock_push:
         job_id = refinement.submit_refinement("a batman phone holder", token="fake-token")
 
     job = jobs.get_job(job_id)

@@ -23,15 +23,15 @@ KERNEL_TEMPLATES_DIR = os.path.join(REPO_ROOT, "kaggle_kernel")
 # all (pure geometry + a downloaded Blender binary), hence None.
 TIERS = {
     "parametric": {
-        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "printforge_parametric"),
+        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "objexa_parametric"),
         "accelerator": None,
     },
     "fast": {
-        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "printforge_creative_fast"),
+        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "objexa_creative_fast"),
         "accelerator": "NvidiaTeslaT4",
     },
     "refined": {
-        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "printforge_creative_refined"),
+        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "objexa_creative_refined"),
         "accelerator": "NvidiaTeslaT4",
     },
     # Milestone 8: the opt-in "Advanced" prompt-refinement pre-processing
@@ -39,14 +39,14 @@ TIERS = {
     # skipping the accelerator means unlimited refinement rounds never
     # touch the same weekly GPU-hour quota the tiers above depend on.
     "refine": {
-        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "printforge_prompt_refiner"),
+        "template_dir": os.path.join(KERNEL_TEMPLATES_DIR, "objexa_prompt_refiner"),
         "accelerator": None,
     },
 }
 
 
 def _slug(job_id):
-    return re.sub(r"[^a-z0-9-]", "", f"printforge-{job_id}".lower())
+    return re.sub(r"[^a-z0-9-]", "", f"objexa-{job_id}".lower())
 
 
 def build_kernel(tier_key, job_id, username, spec=None, prompt=None, idea=None, feedback=None):
@@ -57,7 +57,7 @@ def build_kernel(tier_key, job_id, username, spec=None, prompt=None, idea=None, 
         raise ValueError(f"Unknown kernel tier: {tier_key}")
 
     template_dir = TIERS[tier_key]["template_dir"]
-    dest_dir = tempfile.mkdtemp(prefix="pf_kernel_")
+    dest_dir = tempfile.mkdtemp(prefix="objexa_kernel_")
     for name in os.listdir(template_dir):
         shutil.copy2(os.path.join(template_dir, name), os.path.join(dest_dir, name))
 
