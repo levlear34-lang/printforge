@@ -1659,3 +1659,162 @@ what's next.)
   `/api/status` checks on /create, confirmed "Objexa" actually renders
   everywhere it should -- including the split nav-logo wordmark, which a
   text-only review could easily have missed even after "fixing" it.
+
+- 2026-09-03/05: Investigated a real live bug report (developer tried the
+  Advanced/refined flow with "a standing Ciri figure... sword drawn...
+  stable flat base... ~120mm tall" and got back a passed-validation but
+  visually-nonsense collapsed/lying-down blob) and shipped durable fixes
+  for both root causes -- explicitly not a "patch this one job" fix, per
+  direct instruction to prevent recurrence, not just resolve the incident.
+
+  Investigation, evidence-first: pulled the actual job's kernel log, STL,
+  preview, and validation report via `kaggle kernels output` (the
+  refiner-tier kernel is pushed under the visitor's own account, but this
+  particular job happened to run under the developer's own test account,
+  so it was directly retrievable). Found two independent, real bugs, not
+  one -- and confirmed both with hard data, not inference from the preview
+  image alone:
+
+  Bug 1 (primary, structural): the raw TripoSR mesh's own bounding box
+  (parsed straight from its .obj, before Blender ever touches it) was
+  tallest along its file-Z (0.93 vs 0.48/0.57) -- a genuinely
+  standing-shaped mesh. The *final* validated STL was tallest along Y
+  (83mm) with Z shrunk to the smallest dimension (47mm). That's not
+  scaling noise, it's a clean axis reassignment happening somewhere in
+  the pipeline. Root cause: `bpy.ops.wm.obj_import(filepath=path)` in
+  both creative kernels' `import_mesh()` is called with no
+  up_axis/forward_axis arguments, so Blender applies its own default
+  (`up_axis='Y'`) -- an assumption that the file follows the Wavefront
+  OBJ standard's Y-up convention. TripoSR's raw output doesn't; it's
+  already Z-up (Blender's own native convention). Verified the exact
+  mechanism locally before touching the kernel (not guessed): built a
+  synthetic, deliberately-asymmetric test OBJ authored Z-tall (matching
+  the real job's measured pattern) and ran it through local Blender
+  (`C:\Program Files\Blender Foundation\Blender 5.2\blender.exe
+  --background --python ...`) with several up_axis/forward_axis
+  combinations. No-args reproduced the bug exactly (file-Z-tall ->
+  Blender-Y-tall, a 90-degree rotation about X); `up_axis="Z",
+  forward_axis="Y"` preserved Z-tall with zero rotation applied --
+  confirming TripoSR's convention already matches Blender's, and the
+  "fix" is simply not letting Blender "correct" a mesh that was never
+  wrong. Also sanity-checked the test itself catches the regression (ran
+  it against the old no-args behavior, confirmed the assertion fires).
+
+  Fixed in `kaggle_kernel/objexa_creative_refined/run.py`'s
+  `import_mesh()`, with the full reasoning and verification method
+  written directly into the code comment (not just here) so a future
+  editor sees *why* those specific non-default arguments matter before
+  "simplifying" them away. Added a permanent, Kaggle-free regression
+  test alongside it,
+  `kaggle_kernel/objexa_creative_refined/test_axis_orientation_local.py`
+  -- reuses the same synthetic-Z-tall-box technique, documented to be run
+  manually with local Blender whenever import_mesh() or the Blender
+  version changes, specifically because this exact class of bug (still
+  passes every existing check, silently produces sideways models) would
+  otherwise not be caught by anything in the normal test suite or a
+  casual code review.
+
+  Deliberately did NOT touch `objexa_creative_fast/`'s identical
+  unparameterized `wm.obj_import()` call -- it has the same latent
+  exposure *if* Shap-E's raw output doesn't follow OBJ's Y-up convention
+  either, but there's no evidence either way (no historical bounding-box
+  data for a Shap-E raw mesh clearly resolves it, since most past test
+  prompts weren't single-axis-dominant shapes the way a standing figure
+  is). Changing a currently-working kernel without evidence violates this
+  project's own explicit "don't risk breaking Shap-E" constraint --
+  flagged as a real, open, worth-checking risk rather than silently
+  assumed fine or silently "fixed" alongside the confirmed bug.
+
+  Bug 2 (contributing, independent): the kernel log showed `Token
+  indices sequence length is longer than the specified maximum sequence
+  length for this model (120 > 77)`. Stable Diffusion 1.4's CLIP text
+  encoder hard-caps at 77 tokens (2 of which are always BOS/EOS) and
+  silently drops everything past that. The Advanced-mode AI-refined
+  prompt was 120 tokens *by design* -- detail is the entire point of
+  Milestone 8's refinement feature -- and nothing anywhere checked that
+  against what the downstream SD model could actually consume. Worse:
+  the fixed "3d asset, product photo, single object, centered, plain
+  background" suffix (there specifically to help TripoSR/rembg produce a
+  clean, isolated subject) is appended *after* the user's prompt, so once
+  the prompt alone exceeds ~70 tokens the suffix is silently dropped
+  entirely too, not just shortened.
+
+  Fixed with a dedicated `fit_prompt_to_token_budget()` function
+  (module-level in `objexa_creative_refined/run.py`, right at the point
+  of use -- deliberately not pushed upstream into the shared
+  prompt-refiner kernel, since Quick mode can also send an arbitrarily
+  long creative prompt straight to the refined tier with no AI-refiner
+  involved at all, so the fix has to live wherever the prompt actually
+  meets SD, not just "the AI-refined path"). Reserves token budget for
+  the suffix first (so it never gets silently dropped), truncates the
+  prompt at the last sentence boundary that fits, falls back to a word
+  boundary for one long run-on sentence with no punctuation, and -- the
+  actual "don't let this be silent again" part -- prints a clear warning
+  with the exact token count and what was kept whenever truncation
+  happens, so it shows up in the kernel log instead of requiring someone
+  to notice a bad result and go digging.
+
+  Testable without any of run.py's heavy ML dependencies: run.py only
+  imports torch/diffusers/tsr/bpy *inside* function bodies (deferred
+  until actually called on Kaggle), so `fit_prompt_to_token_budget` can
+  be imported and unit tested directly from the real, shipped kernel file
+  via `importlib.util.spec_from_file_location` -- no duplicated copy that
+  could quietly drift, unlike the Blender-side fix above (which
+  genuinely needs a real Blender/bpy environment pytest doesn't have).
+  8 new tests in `backend/tests/test_refined_kernel_prompt_budget.py`,
+  using an injected word-count stand-in instead of the real CLIP
+  tokenizer specifically so a passing test proves the *algorithm* --
+  budget math, sentence/word-boundary truncation, suffix preservation --
+  is correct in general, not just tuned to CLIP's specific subword
+  boundaries.
+
+  A third, unrelated bug turned up purely as a side effect of adding the
+  Blender regression test file: `kernel_builder.build_kernel()` used to
+  blindly copy every file in a template directory (`os.listdir` +
+  `shutil.copy2`), which broke *every* push from the refined tier the
+  moment `test_axis_orientation_local.py` existed alongside run.py,
+  because `shutil.copy2` can't copy a directory and a `__pycache__` (from
+  locally importing run.py for the token-budget tests) appeared right
+  next to it. Fixed to copy only the two files an actual push needs
+  (`kernel-metadata.json`, `run.py`) -- a template directory should be
+  free to hold reference/test files a real push doesn't need without
+  that silently breaking the pipeline. Added a regression test
+  (`test_build_kernel_only_copies_expected_files`) using a fake template
+  dir with both an extra file and an extra subdirectory, so this can't
+  quietly reappear either.
+
+  Verified everything end to end with one real Kaggle run, not just the
+  synthetic/unit tests -- pushed the fixed kernel with the *exact* prompt
+  that produced the original broken job. Result: bounds_mm
+  {x: 30.86, y: 47.78, z: 79.10} -- Z now clearly dominant (previously
+  the smallest of the three), and the preview genuinely shows a standing
+  humanoid figure holding a sword in an extended stance, on a flat base --
+  not perfect (TripoSR's inherent low-poly quality limits are still
+  there), but structurally and orientationally correct, a real fix
+  confirmed against real model output, not just a plausible theory. The
+  log also confirmed the token-budget fix fired as designed: "WARNING:
+  prompt is 108 CLIP tokens, over the 77-token budget -- truncated to
+  fit" (108, not 120, since CONCEPT_IMAGE_SUFFIX's own token cost is
+  reserved first) -- and notably the surviving portion still captured
+  "standing" and "sword drawn... extended stance," so even truncated,
+  the fix produces a materially better-guided generation than the silent
+  full-drop the suffix used to suffer. GPU cost of this whole
+  investigation: 0.18h (one verification run; the Blender-side work was
+  entirely local and free).
+
+  Regarding the developer's separate question -- should the automatic
+  quality check catch "wrong pose/orientation," not just degenerate
+  geometry: answered but deliberately not built. The current checks
+  (`check_mesh_quality`, Blender's `validate()`) assess mesh *integrity*
+  only (vertex/face counts, bounding-box scale, volume, manifold edges) --
+  there is no way to extend that class of check to "does this match what
+  was asked for," since that requires actually looking at the result
+  relative to the prompt (a vision-language model comparing the render
+  against the text), a fundamentally different kind of check with real
+  added cost/latency/complexity, and even then it would only catch gross
+  mismatches. Flagged as a real, separate design decision for the
+  developer rather than unilaterally scoped or built.
+
+  140/140 backend tests passing. Next: none planned -- awaiting
+  direction on whether to investigate the fast/Shap-E tier's same-class
+  axis-convention risk, and on the semantic quality-check question above.
