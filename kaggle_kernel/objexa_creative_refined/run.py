@@ -25,6 +25,7 @@ objexa_parametric/run.py. Keep both in sync if that logic changes.
 """
 import json
 import os
+import re
 import subprocess
 import shutil
 import sys
@@ -57,6 +58,68 @@ MIN_FACES = 100
 MIN_DIMENSION = 0.3
 MAX_DIMENSION = 5.0
 MIN_VOLUME = 0.005
+
+# Stable Diffusion 1.4's CLIP text encoder hard-caps at 77 tokens (2 of which
+# are the BOS/EOS special tokens CLIP always adds) and silently drops
+# anything past that -- no error, no truncation warning from the library
+# itself. Found via a real production bug: the Advanced-mode AI prompt
+# refiner produces long, detailed prompts *by design* (that's the whole
+# point of Milestone 8's refinement feature), and a 120-token refined prompt
+# for a "standing Ciri figure... sword drawn... stable flat base..." lost
+# its entire back half above the ~68-70 word/token mark -- including the
+# base-stability and scale guidance -- with nothing in the kernel or the
+# job's result surfacing that it happened. This isn't specific to
+# AI-refined prompts either: Quick mode can also send an arbitrarily long
+# creative prompt straight to the refined tier, so the fix lives here, at
+# the actual point of use, not upstream in the shared prompt-refiner kernel.
+CLIP_MAX_TOKENS = 77
+CLIP_SPECIAL_TOKENS = 2
+CONCEPT_IMAGE_SUFFIX = ", 3d asset, product photo, single object, centered, plain background"
+
+
+def fit_prompt_to_token_budget(prompt, suffix, count_tokens, max_tokens=CLIP_MAX_TOKENS, special_tokens=CLIP_SPECIAL_TOKENS):
+    """Fit `prompt` + `suffix` inside a hard token budget, truncating `prompt`
+    (never `suffix` -- it's short and carries generation-quality guidance
+    rembg/TripoSR depend on, e.g. "single object, centered", so it must
+    survive intact) at a sentence boundary where possible.
+
+    `count_tokens` is injected (a real CLIP tokenizer at runtime, a cheap
+    stand-in in tests) specifically so this algorithm -- the part that's
+    actually easy to get subtly wrong (off-by-one budget math, cutting
+    mid-word, dropping the suffix) -- can be unit tested without needing the
+    real ~1.7GB CLIP tokenizer available in a fast, offline test suite.
+
+    Returns (full_prompt_with_suffix, was_truncated, prompt_portion_used).
+    """
+    budget = max_tokens - special_tokens - count_tokens(suffix)
+    if budget <= 0:
+        # Degenerate case (suffix alone doesn't fit) -- not expected in
+        # practice given how short CONCEPT_IMAGE_SUFFIX is, but fail safe
+        # rather than send a negative-budget prompt to the tokenizer.
+        return suffix.lstrip(", "), True, ""
+
+    if count_tokens(prompt) <= budget:
+        return f"{prompt}{suffix}", False, prompt
+
+    sentences = re.split(r"(?<=[.!?])\s+", prompt.strip())
+    kept = ""
+    for sentence in sentences:
+        candidate = f"{kept} {sentence}".strip() if kept else sentence
+        if count_tokens(candidate) > budget:
+            break
+        kept = candidate
+
+    if not kept:
+        # Not even one full sentence fits (e.g. one long run-on sentence) --
+        # fall back to a word boundary instead of an arbitrary token cut, so
+        # the result is still readable text, not a chopped-off half-word.
+        for word in prompt.split():
+            candidate = f"{kept} {word}".strip() if kept else word
+            if count_tokens(candidate) > budget:
+                break
+            kept = candidate
+
+    return f"{kept}{suffix}", True, kept
 
 
 def _pip(*args):
@@ -100,7 +163,16 @@ def generate_mesh():
         SD_MODEL, torch_dtype=torch.float16 if device == "cuda" else torch.float32
     )
     pipe = pipe.to(device)
-    full_prompt = f"{PROMPT}, 3d asset, product photo, single object, centered, plain background"
+
+    count_tokens = lambda text: len(pipe.tokenizer(text, truncation=False)["input_ids"])
+    full_prompt, was_truncated, prompt_used = fit_prompt_to_token_budget(PROMPT, CONCEPT_IMAGE_SUFFIX, count_tokens)
+    if was_truncated:
+        print(
+            f"WARNING: prompt is {count_tokens(PROMPT)} CLIP tokens, over the "
+            f"{CLIP_MAX_TOKENS}-token budget -- truncated to fit. "
+            f"Used: {prompt_used!r}"
+        )
+
     negative_prompt = "multiple objects, cropped, blurry, text, watermark, collage"
     image = pipe(full_prompt, negative_prompt=negative_prompt, num_inference_steps=30).images[0]
     del pipe
@@ -218,7 +290,28 @@ def apply_flat_material(obj):
 
 
 def import_mesh(path):
-    bpy.ops.wm.obj_import(filepath=path)
+    # up_axis="Z", forward_axis="Y" is NOT Blender's default for wm.obj_import
+    # (which is up_axis="Y") -- it's deliberate and load-bearing. Found via a
+    # real production bug: a "standing Ciri figure, sword drawn, ~120mm tall"
+    # prompt came back as a collapsed/lying-down blob despite passing
+    # validation. Root cause, confirmed by comparing the raw TripoSR mesh's
+    # own bounding box (tallest along its file-Z, e.g. 0.48/0.57/0.93) against
+    # the final exported STL (tallest along Y at 83mm, Z shrunk to 47mm) --
+    # not a scaling artifact, a genuine axis reassignment. TripoSR's raw .obj
+    # output does not follow the Wavefront OBJ format's own Y-up convention;
+    # it's already Z-up (matching Blender's native convention). Blender's
+    # default silently assumes standard OBJ Y-up and "corrects" for it,
+    # rotating an already-correct mesh onto its side. Verified locally with a
+    # synthetic asymmetric test box before touching this file (not guessed):
+    # bpy.ops.wm.obj_import(filepath=path) with no args reproduces the exact
+    # bug pattern (file-Z-tall -> Blender-Y-tall, rot_euler 90 deg about X);
+    # up_axis="Z" (any forward_axis) keeps file-Z-tall as Blender-Z-tall with
+    # zero rotation applied, i.e. treats the file as already being in
+    # Blender's own convention, which is what it actually is. See
+    # test_axis_orientation_local.py (same directory) for a repeatable,
+    # Kaggle-free regression check of this exact behavior -- rerun it if this
+    # function or the Blender version ever changes.
+    bpy.ops.wm.obj_import(filepath=path, up_axis="Z", forward_axis="Y")
     imported = [obj for obj in bpy.context.selected_objects if obj.type == "MESH"]
     if len(imported) > 1:
         bpy.context.view_layer.objects.active = imported[0]
