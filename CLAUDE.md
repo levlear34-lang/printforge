@@ -1,4 +1,4 @@
-# PrintForge — Project Context
+# Objexa — Project Context
 
 ## Purpose
 A public website: a visitor describes an object in plain English (parametric,
@@ -14,8 +14,14 @@ its own repo, its own git history, and its own deployment — AI_3D_FACTORY is
 never modified as part of this project.
 
 ## Naming
-Project name is "PrintForge" — used for the repo, page titles, and site
-branding throughout.
+Project name is "Objexa" — used for page titles and site branding
+throughout. Renamed from "PrintForge" on 2026-09-03 (see Progress Log) --
+the GitHub repo (`levlear34-lang/printforge`) and the live Render URL
+(`printforge-bbs1.onrender.com`) were deliberately left unchanged in that
+pass (see the Progress Log entry for why), so those two still say
+"printforge" and will until a custom domain makes a URL change worth the
+risk. Don't "fix" those two references back to Objexa without checking
+the Progress Log first -- they're intentionally stale, not missed.
 
 ## Architecture
 - **Backend** (`backend/`, FastAPI): handles HTTP requests, job tracking,
@@ -65,11 +71,11 @@ branding throughout.
 - `backend/app/services/generation.py` — orchestrates submit/poll/retrieve
 - `backend/app/routes/create.py` — `/api/create`, `/api/jobs/{id}`,
   `/api/jobs/{id}/download`
-- `kaggle_kernel/printforge_parametric/` — the parametric-tier generation
+- `kaggle_kernel/objexa_parametric/` — the parametric-tier generation
   kernel (template; job-specific copies are built at request time, never
   committed)
-- `kaggle_kernel/printforge_creative_fast/` (Shap-E) and
-  `printforge_creative_refined/` (Stable Diffusion -> TripoSR) — the two
+- `kaggle_kernel/objexa_creative_fast/` (Shap-E) and
+  `objexa_creative_refined/` (Stable Diffusion -> TripoSR) — the two
   creative-tier kernels: ML generation, a raw-mesh sanity check, then the
   same downloaded-portable-Blender print-readiness stage the parametric
   kernel uses (auto-scale, repair via Voxel Remesh, base-add, export).
@@ -117,7 +123,7 @@ branding throughout.
 `backend/app/vendored/request_parser.py`, `request_classifier.py`, and
 `design_agent.py` are **copies**, not imports, of the same-named files in
 AI_3D_FACTORY's `app/modules/`. This repo's copies are the source of truth
-for PrintForge going forward — they will diverge over time (e.g. the parser
+for Objexa going forward — they will diverge over time (e.g. the parser
 may need to accept a wider vocabulary for public/anonymous users than the
 personal CLI tool ever needed). If a bug is found and fixed in one project's
 copy, it is **not** automatically fixed in the other; check both if a
@@ -130,7 +136,7 @@ it, not carried over verbatim.
 Ported (not copied) in Milestone 2:
 - `app/controllers/blender/generate_model.py`'s geometry/validate/
   render_preview functions were ported into
-  `kaggle_kernel/printforge_parametric/run.py`'s `INNER_SCRIPT` — same
+  `kaggle_kernel/objexa_parametric/run.py`'s `INNER_SCRIPT` — same
   math, adapted to run under a downloaded Blender binary instead of a
   local install, with two real fixes found only by actually running it on
   Kaggle (not assumed from the local-Blender version): `bpy.ops.wm.stl_export`
@@ -240,7 +246,7 @@ GPU-hour quota is spent on actual 3D generation.
   /create -- labeled "Quick" (current behavior, default) vs "Advanced:
   AI-refined prompt" (slower, uses a separate CPU-only Kaggle job per
   round before 3D generation even starts).
-- New kernel (`kaggle_kernel/printforge_prompt_refiner/`): Qwen2.5-1.5B-
+- New kernel (`kaggle_kernel/objexa_prompt_refiner/`): Qwen2.5-1.5B-
   Instruct, CPU-only (`enable_gpu: false`, matching the parametric
   tier's precedent) -- text expansion doesn't need a GPU, and running it
   without one means unlimited refinement rounds never touch the same
@@ -428,7 +434,7 @@ what's next.)
   `{visitor_username}/printforge-{job_id}`, injects the computed spec),
   `generation.py` (submit/poll/retrieve orchestration), and
   `routes/create.py` (`POST /api/create`, `GET /api/jobs/{id}`,
-  `GET /api/jobs/{id}/download`). `kaggle_kernel/printforge_parametric/
+  `GET /api/jobs/{id}/download`). `kaggle_kernel/objexa_parametric/
   run.py` is the actual generation kernel -- a direct port of
   AI_3D_FACTORY's `generate_model.py` (create_organizer/holder/stand,
   mesh_bounds, validate, render_preview), wrapped in a download-Blender/
@@ -1231,7 +1237,7 @@ what's next.)
   throughout (no backend touched, confirmed after each commit).
 
   AI-refined-prompt feature, Milestone 1 (Kaggle kernel) -- done.
-  `kaggle_kernel/printforge_prompt_refiner/`: Qwen2.5-1.5B-Instruct
+  `kaggle_kernel/objexa_prompt_refiner/`: Qwen2.5-1.5B-Instruct
   (Apache 2.0, ungated, ~2.4GB), CPU-only via `enable_gpu: false` --
   chosen deliberately so unlimited refinement rounds never touch the
   weekly GPU-hour quota the fast/refined 3D tiers depend on, matching the
@@ -1564,3 +1570,92 @@ what's next.)
   accessible radio-group and skeleton loaders, (3) the Kaggle-polling
   backoff fix, kept separate since it's backend logic unrelated to the
   visual work. Next: none planned -- awaiting further direction.
+
+- 2026-09-03: Full rebrand, PrintForge -> Objexa. Code/copy only in this
+  pass -- the developer explicitly decided to leave the GitHub repo
+  (`levlear34-lang/printforge`) and the live Render URL
+  (`printforge-bbs1.onrender.com`) unchanged for now (see "Naming" above
+  for why, and the reasoning below).
+
+  Ran a full inventory before changing anything, per instruction: 37
+  files matched "printforge" case-insensitively across frontend HTML/JS,
+  backend Python, the 4 Kaggle kernel template folders, tests, and docs.
+  Also caught two things a plain text search of "printforge"/"PrintForge"
+  would have missed: the nav-logo wordmark was split across HTML as
+  `Print<span>Forge</span>` (for the two-tone accent-color styling), so
+  it never matched as a contiguous string; and two abbreviated `pf_`
+  identifiers (`kernel_builder.py`'s temp-dir prefix, app.js's
+  `pf_cookie_consent` localStorage key) don't contain the literal word
+  "printforge" at all. Found both by deliberately re-checking for split/
+  abbreviated forms rather than trusting the first grep pass was
+  complete.
+
+  Researched the two infrastructure steps before doing (or refusing to
+  do) anything with them, since the developer explicitly asked for that
+  verification: this environment has no `gh` CLI and no Render API
+  access, so neither rename could be executed here regardless -- but the
+  more important finding was that "rename the Render service so the URL
+  becomes objexa.onrender.com" isn't achievable as a simple rename at
+  all. Render's own docs and multiple community reports confirm the
+  onrender.com subdomain is fixed at service-creation time; changing it
+  requires deleting and recreating the service (losing deploy history,
+  re-adding every env var by hand, real downtime) or adding a custom
+  domain instead. Reported this before touching any infrastructure, per
+  the standing instruction to flag real risk rather than proceed on
+  assumption. Developer's decision: keep the current URL, revisit only
+  if/when a custom domain is purchased.
+
+  Judgment call on CLAUDE.md itself, stated rather than applied silently:
+  the Progress Log is a dated historical journal -- entries describing
+  what was actually true *at the time* ("PrintForge is...") were left
+  as-is rather than rewritten, since retroactively renaming history would
+  misrepresent it. The living/structural sections (title, Naming,
+  Architecture's file-path references, Vendored-modules section) were
+  updated, since those describe the *current* state of the repo. One
+  exception to "leave history alone": literal `kaggle_kernel/printforge_*`
+  path references inside old Progress Log entries were still updated to
+  `objexa_*`, even though everything else in those entries was left
+  alone -- a stale prose mention is still accurate as history, but a
+  stale file path is just a broken pointer for anyone who goes looking,
+  which serves no one.
+
+  Renamed, consistently: page titles/meta descriptions/og-Twitter-card
+  text/footer copyright across all 15 frontend pages; the nav-logo
+  wordmark (`Obj<span>exa</span>`, keeping the same two-tone accent
+  treatment "PrintForge" used); FastAPI's app title and `/api/status`
+  response; the downloaded STL's filename (`objexa-{job_id}.stl`); the
+  session cookie name and its serializer salt (`objexa_session`); temp
+  directory names in generation.py/refinement.py/kernel_builder.py; the
+  cookie-consent localStorage key; all 4 Kaggle kernel template folders
+  (`git mv`'d, not just edited, so history follows them) and their
+  kernel-metadata.json/run.py content, including the `_slug()` function
+  that generates the live Kaggle kernel ID for every real visitor
+  request going forward (`objexa-{job_id}`, was `printforge-{job_id}`);
+  README.md; render.yaml's `name:` field (cosmetic -- this file isn't
+  actually wired to the live service via Blueprint sync, since that
+  service was created manually through Render's dashboard, not from this
+  file, so editing it doesn't touch the live service at all).
+
+  Deliberately NOT renamed: the "Describe it. Print it." tagline -- "print"
+  there is describing the physical action (you print the file), not
+  invoking the old brand name, so it reads as accurate copy regardless of
+  what the product is called. Flagged this distinction rather than
+  silently deciding it wasn't in scope.
+
+  Two renamed identifiers have a minor, one-time, low-stakes side effect
+  worth knowing about: the session-cookie-name and cookie-consent-key
+  renames mean any visitor with an existing cookie under the old name
+  effectively starts fresh after this deploy (logged-out; sees the
+  cookie-consent banner again once). Not a bug, just a normal consequence
+  of renaming a cookie key, and not something the code needs to handle
+  specially -- flagging it so it isn't mistaken for a regression if
+  noticed.
+
+  131/131 backend tests still passing after the rename (mock fixture
+  strings like `"testuser/printforge-xyz"` were part of the blanket
+  rename too, so they still match the renamed `_slug()` output).
+  Verified visually, not just via search-and-replace: real Playwright
+  screenshots of the landing page and FAQ, plus `document.title` and
+  `/api/status` checks on /create, confirmed "Objexa" actually renders
+  everywhere it should -- including the split nav-logo wordmark, which a
+  text-only review could easily have missed even after "fixing" it.

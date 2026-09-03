@@ -1,4 +1,4 @@
-# PrintForge
+# Objexa
 
 A public website that turns a plain-English request ("phone stand, 2 slots,
 18 degrees" or "Batman themed phone holder") into a downloadable, validated,
