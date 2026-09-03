@@ -58,7 +58,16 @@ def build_kernel(tier_key, job_id, username, spec=None, prompt=None, idea=None, 
 
     template_dir = TIERS[tier_key]["template_dir"]
     dest_dir = tempfile.mkdtemp(prefix="objexa_kernel_")
-    for name in os.listdir(template_dir):
+    # Copy only the two files an actual Kaggle push needs, not "whatever
+    # happens to be in this directory" -- found the hard way: adding a local
+    # regression test (test_axis_orientation_local.py, deliberately kept
+    # alongside its kernel per this project's existing docs-live-with-code
+    # convention) into objexa_creative_refined/ broke every push from that
+    # tier, because the old blind os.listdir() copy also tried to copy that
+    # file's __pycache__ directory with shutil.copy2 (file-only, raises on a
+    # directory). A template directory should be free to hold reference/test
+    # files a real push doesn't need without silently breaking the pipeline.
+    for name in ("kernel-metadata.json", "run.py"):
         shutil.copy2(os.path.join(template_dir, name), os.path.join(dest_dir, name))
 
     kernel_id = f"{username}/{_slug(job_id)}"

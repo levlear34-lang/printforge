@@ -1,3 +1,5 @@
+import os
+
 from app.services import kernel_builder
 
 
@@ -75,5 +77,35 @@ def test_build_kernel_refine_round_one_has_empty_feedback():
         with open(f"{kernel_dir}/run.py", encoding="utf-8") as f:
             content = f.read()
         assert 'FEEDBACK = ""' in content
+    finally:
+        kernel_builder.cleanup(kernel_dir)
+
+
+def test_build_kernel_only_copies_expected_files(tmp_path, monkeypatch):
+    """Regression guard: build_kernel used to blindly copy every file in a
+    template directory (os.listdir + shutil.copy2), which broke outright the
+    day a template directory gained a non-kernel file -- a __pycache__ dir
+    from a local test import (shutil.copy2 can't copy a directory). A
+    template dir must be free to hold reference/test files a real push
+    doesn't need without that breaking every push from that tier.
+    """
+    fake_template = tmp_path / "fake_tier"
+    fake_template.mkdir()
+    (fake_template / "kernel-metadata.json").write_text(
+        '{"id": "PLACEHOLDER_USERNAME/objexa-PLACEHOLDER_JOB_ID", '
+        '"title": "objexa-PLACEHOLDER_JOB_ID"}',
+        encoding="utf-8",
+    )
+    (fake_template / "run.py").write_text('PROMPT = "placeholder"\n', encoding="utf-8")
+    # Simulates exactly what broke this: an extra file plus a directory
+    # (shutil.copy2 raises on directories) sitting alongside the real kernel.
+    (fake_template / "test_something_local.py").write_text("# not part of the kernel\n", encoding="utf-8")
+    (fake_template / "__pycache__").mkdir()
+
+    monkeypatch.setitem(kernel_builder.TIERS, "fake", {"template_dir": str(fake_template), "accelerator": None})
+
+    kernel_dir, kernel_id = kernel_builder.build_kernel("fake", "abc123", "testuser", prompt="x")
+    try:
+        assert set(os.listdir(kernel_dir)) == {"kernel-metadata.json", "run.py"}
     finally:
         kernel_builder.cleanup(kernel_dir)
